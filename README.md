@@ -27,6 +27,14 @@
 
 ---
 
+## Meets homologation
+
+The isolated Meets homologation deployment (dedicated PostgreSQL, Redis,
+persistent sessions, and automatic HTTPS) is documented in
+[`deploy/homolog/README.md`](deploy/homolog/README.md). The Central must access
+this API through the `meets-whatsapp-evolution` middleware; credentials and
+instance names must not be exposed to frontend clients.
+
 ## About
 
 **Evolution API** is a powerful, production-ready REST API for WhatsApp and multi-channel messaging. Originally focused on WhatsApp, it has grown into a comprehensive platform supporting multiple messaging providers and integrations.
