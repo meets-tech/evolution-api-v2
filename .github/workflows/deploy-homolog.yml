@@ -1,0 +1,28 @@
+name: Deploy Evolution API - HOMOLOG
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - develop
+
+jobs:
+  deploy:
+    name: Deploy no servidor de homolog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: matheusvanzan/sshpass-action@v2
+        with:
+          host: ${{ secrets.GERADOR_5 }}
+          user: ${{ secrets.SERVER_CONTABO_USER }}
+          pass: ${{ secrets.SERVER_CONTABO_PASS }}
+          run: |
+            cd /home/meets/projetos/evolution-api-v2
+            git remote set-url origin https://${{ secrets.DEPLOY_TOKEN }}@github.com/meets-tech/evolution-api-v2.git
+            git config --global --add safe.directory $(pwd)
+            git fetch --all
+            git reset --hard ${{ github.sha }}
+            cd deploy/homolog
+            docker compose build evolution-api
+            docker compose up -d --no-deps evolution-api
+            docker compose ps
