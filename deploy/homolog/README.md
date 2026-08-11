@@ -10,6 +10,7 @@ inside the private Compose network.
 ## Requirements
 
 - `EVOLUTION_DOMAIN` DNS record pointing to the server;
+- `MIDDLEWARE_DOMAIN` set to the public `meets-whatsapp-evolution` host;
 - TCP 80/443 and UDP 443 available;
 - Docker Engine with Compose v2.
 
@@ -25,6 +26,13 @@ openssl rand -hex 24
 Use different generated values for `EVOLUTION_API_KEY`, `POSTGRES_PASSWORD`, and
 `REDIS_PASSWORD`. Keep internal passwords alphanumeric so the database and Redis
 connection URIs do not require URL encoding. Never commit `.env`.
+
+Validate the file before deploying:
+
+```bash
+./scripts/validate-env.sh .env
+docker compose config --quiet
+```
 
 Configure the Meets middleware with the same API key:
 
@@ -52,3 +60,7 @@ curl -fsS -H "apikey: $EVOLUTION_API_KEY" \
 
 Do not run `docker compose down -v` in homologation: it deletes the database,
 certificates, Redis data, and WhatsApp sessions.
+
+The GitHub deploy workflow updates the complete Compose project and verifies the
+public HTTPS endpoint. It uses `DEPLOY_TOKEN` only for the individual `git fetch`;
+the token is never written to the repository remote configuration on the server.

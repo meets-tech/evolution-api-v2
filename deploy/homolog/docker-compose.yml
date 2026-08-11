@@ -7,6 +7,8 @@ services:
       dockerfile: Dockerfile
     image: meets-tech/evolution-api:2.3.7-homolog
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
     depends_on:
       evolution-postgres:
         condition: service_healthy
@@ -17,7 +19,11 @@ services:
       SERVER_TYPE: http
       SERVER_PORT: 8080
       SERVER_URL: https://${EVOLUTION_DOMAIN}
+      CORS_ORIGIN: https://${EVOLUTION_DOMAIN},https://${MIDDLEWARE_DOMAIN}
+      CORS_METHODS: GET,POST,PUT,DELETE,PATCH
+      CORS_CREDENTIALS: "true"
       AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
       DATABASE_PROVIDER: postgresql
       DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@evolution-postgres:5432/${POSTGRES_DB}?schema=evolution_api
       DATABASE_CONNECTION_CLIENT_NAME: meets_evolution_homolog
@@ -57,6 +63,11 @@ services:
       start_period: 90s
     security_opt:
       - no-new-privileges:true
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
 
   evolution-postgres:
     image: postgres:15-alpine
@@ -77,6 +88,7 @@ services:
       - evolution_private
     security_opt:
       - no-new-privileges:true
+    logging: *default-logging
 
   evolution-redis:
     image: redis:7.4-alpine
@@ -95,6 +107,7 @@ services:
       - evolution_private
     security_opt:
       - no-new-privileges:true
+    logging: *default-logging
 
   evolution-proxy:
     image: caddy:2.10-alpine
@@ -117,6 +130,7 @@ services:
       - evolution_private
     security_opt:
       - no-new-privileges:true
+    logging: *default-logging
 
 volumes:
   evolution_instances:
