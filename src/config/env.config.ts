@@ -389,6 +389,10 @@ export type EventEmitter = {
   MAX_LISTENERS: number;
 };
 
+export type Startup = {
+  INSTANCE_LOAD_CONCURRENCY: number;
+};
+
 export type Production = boolean;
 
 export interface Env {
@@ -428,6 +432,7 @@ export interface Env {
   FACEBOOK: Facebook;
   SENTRY: Sentry;
   EVENT_EMITTER: EventEmitter;
+  STARTUP: Startup;
   PRODUCTION?: Production;
 }
 
@@ -743,6 +748,12 @@ export class ConfigService {
       DEL_TEMP_INSTANCES: isBooleanString(process.env?.DEL_TEMP_INSTANCES)
         ? process.env.DEL_TEMP_INSTANCES === 'true'
         : true,
+      STARTUP: {
+        INSTANCE_LOAD_CONCURRENCY: Math.max(
+          1,
+          Number.parseInt(process.env.INSTANCE_LOAD_CONCURRENCY || '10', 10),
+        ),
+      },
       LANGUAGE: process.env?.LANGUAGE || 'en',
       WEBHOOK: {
         GLOBAL: {

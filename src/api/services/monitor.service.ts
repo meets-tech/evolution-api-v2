@@ -3,7 +3,7 @@ import { ProviderFiles } from '@api/provider/sessions';
 import { PrismaRepository } from '@api/repository/repository.service';
 import { channelController } from '@api/server.module';
 import { Events, Integration } from '@api/types/wa.types';
-import { CacheConf, Chatwoot, ConfigService, Database, DelInstance, ProviderSession } from '@config/env.config';
+import { CacheConf, Chatwoot, ConfigService, Database, DelInstance, ProviderSession, Startup } from '@config/env.config';
 import { Logger } from '@config/logger.config';
 import { INSTANCE_DIR, STORE_DIR } from '@config/path.config';
 import { NotFoundException } from '@exceptions';
@@ -311,8 +311,7 @@ export class WAMonitoringService {
     const keys = await this.cache.keys();
 
     if (keys?.length > 0) {
-      await Promise.all(
-        keys.map(async (k) => {
+      await this.loadInBatches(keys, async (k) => {
           const instanceData = await this.prismaRepository.instance.findUnique({
             where: { id: k.split(':')[1] },
           });
@@ -331,9 +330,8 @@ export class WAMonitoringService {
             connectionStatus: instanceData.connectionStatus as any, // Pass connection status
           };
 
-          this.setInstance(instance);
-        }),
-      );
+          await this.setInstance(instance);
+      });
     }
   }
 
@@ -348,9 +346,8 @@ export class WAMonitoringService {
       return;
     }
 
-    await Promise.all(
-      instances.map(async (instance) => {
-        this.setInstance({
+    await this.loadInBatches(instances, async (instance) => {
+        await this.setInstance({
           instanceId: instance.id,
           instanceName: instance.name,
           integration: instance.integration,
@@ -360,8 +357,7 @@ export class WAMonitoringService {
           ownerJid: instance.ownerJid,
           connectionStatus: instance.connectionStatus as any, // Pass connection status
         });
-      }),
-    );
+    });
   }
 
   private async loadInstancesFromProvider() {
@@ -371,13 +367,12 @@ export class WAMonitoringService {
       return;
     }
 
-    await Promise.all(
-      instances?.data?.map(async (instanceId: string) => {
+    await this.loadInBatches(instances.data, async (instanceId: string) => {
         const instance = await this.prismaRepository.instance.findUnique({
           where: { id: instanceId },
         });
 
-        this.setInstance({
+        await this.setInstance({
           instanceId: instance.id,
           instanceName: instance.name,
           integration: instance.integration,
@@ -385,8 +380,19 @@ export class WAMonitoringService {
           businessId: instance.businessId,
           connectionStatus: instance.connectionStatus as any, // Pass connection status
         });
-      }),
-    );
+    });
+  }
+
+  private async loadInBatches<T>(
+    items: T[],
+    load: (item: T) => Promise<void>,
+  ): Promise<void> {
+    const { INSTANCE_LOAD_CONCURRENCY: concurrency } =
+      this.configService.get<Startup>('STARTUP');
+
+    for (let index = 0; index < items.length; index += concurrency) {
+      await Promise.all(items.slice(index, index + concurrency).map(load));
+    }
   }
 
   private removeInstance() {
