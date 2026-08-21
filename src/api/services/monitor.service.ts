@@ -13,6 +13,7 @@ import { rmSync } from 'fs';
 import { join } from 'path';
 
 import { CacheService } from './cache.service';
+import { InstanceOwnershipService } from './instance-ownership.service';
 
 export class WAMonitoringService {
   constructor(
@@ -23,6 +24,7 @@ export class WAMonitoringService {
     private readonly cache: CacheService,
     private readonly chatwootCache: CacheService,
     private readonly baileysCache: CacheService,
+    private readonly ownership: InstanceOwnershipService,
   ) {
     this.removeInstance();
     this.noConnection();
@@ -271,6 +273,10 @@ export class WAMonitoringService {
   }
 
   private async setInstance(instanceData: InstanceDto) {
+    if (!(await this.ownership.acquire(instanceData.instanceName))) {
+      this.logger.warn(`Skipping instance "${instanceData.instanceName}" because another node owns it`);
+      return;
+    }
     const instance = channelController.init(instanceData, {
       configService: this.configService,
       eventEmitter: this.eventEmitter,
@@ -281,7 +287,10 @@ export class WAMonitoringService {
       providerFiles: this.providerFiles,
     });
 
-    if (!instance) return;
+    if (!instance) {
+      await this.ownership.release(instanceData.instanceName);
+      return;
+    }
 
     instance.setInstance({
       instanceId: instanceData.instanceId,
@@ -305,6 +314,11 @@ export class WAMonitoringService {
     }
 
     this.waInstances[instanceData.instanceName] = instance;
+    this.ownership.startRenewal(instanceData.instanceName, async () => {
+      this.logger.error(`Lost ownership of instance "${instanceData.instanceName}"`);
+      await this.waInstances[instanceData.instanceName]?.client?.logout('Lost Evolution ownership');
+      delete this.waInstances[instanceData.instanceName];
+    });
   }
 
   private async loadInstancesFromRedis() {
@@ -410,6 +424,7 @@ export class WAMonitoringService {
 
       try {
         delete this.waInstances[instanceName];
+        await this.ownership.release(instanceName);
       } catch (error) {
         this.logger.error(error);
       }
