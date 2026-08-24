@@ -3,7 +3,15 @@ import { ProviderFiles } from '@api/provider/sessions';
 import { PrismaRepository } from '@api/repository/repository.service';
 import { channelController } from '@api/server.module';
 import { Events, Integration } from '@api/types/wa.types';
-import { CacheConf, Chatwoot, ConfigService, Database, DelInstance, ProviderSession, Startup } from '@config/env.config';
+import {
+  CacheConf,
+  Chatwoot,
+  ConfigService,
+  Database,
+  DelInstance,
+  ProviderSession,
+  Startup,
+} from '@config/env.config';
 import { Logger } from '@config/logger.config';
 import { INSTANCE_DIR, STORE_DIR } from '@config/path.config';
 import { NotFoundException } from '@exceptions';
@@ -326,25 +334,25 @@ export class WAMonitoringService {
 
     if (keys?.length > 0) {
       await this.loadInBatches(keys, async (k) => {
-          const instanceData = await this.prismaRepository.instance.findUnique({
-            where: { id: k.split(':')[1] },
-          });
+        const instanceData = await this.prismaRepository.instance.findUnique({
+          where: { id: k.split(':')[1] },
+        });
 
-          if (!instanceData) {
-            return;
-          }
+        if (!instanceData) {
+          return;
+        }
 
-          const instance = {
-            instanceId: k.split(':')[1],
-            instanceName: k.split(':')[2],
-            integration: instanceData.integration,
-            token: instanceData.token,
-            number: instanceData.number,
-            businessId: instanceData.businessId,
-            connectionStatus: instanceData.connectionStatus as any, // Pass connection status
-          };
+        const instance = {
+          instanceId: k.split(':')[1],
+          instanceName: k.split(':')[2],
+          integration: instanceData.integration,
+          token: instanceData.token,
+          number: instanceData.number,
+          businessId: instanceData.businessId,
+          connectionStatus: instanceData.connectionStatus as any, // Pass connection status
+        };
 
-          await this.setInstance(instance);
+        await this.setInstance(instance);
       });
     }
   }
@@ -361,16 +369,16 @@ export class WAMonitoringService {
     }
 
     await this.loadInBatches(instances, async (instance) => {
-        await this.setInstance({
-          instanceId: instance.id,
-          instanceName: instance.name,
-          integration: instance.integration,
-          token: instance.token,
-          number: instance.number,
-          businessId: instance.businessId,
-          ownerJid: instance.ownerJid,
-          connectionStatus: instance.connectionStatus as any, // Pass connection status
-        });
+      await this.setInstance({
+        instanceId: instance.id,
+        instanceName: instance.name,
+        integration: instance.integration,
+        token: instance.token,
+        number: instance.number,
+        businessId: instance.businessId,
+        ownerJid: instance.ownerJid,
+        connectionStatus: instance.connectionStatus as any, // Pass connection status
+      });
     });
   }
 
@@ -382,27 +390,23 @@ export class WAMonitoringService {
     }
 
     await this.loadInBatches(instances.data, async (instanceId: string) => {
-        const instance = await this.prismaRepository.instance.findUnique({
-          where: { id: instanceId },
-        });
+      const instance = await this.prismaRepository.instance.findUnique({
+        where: { id: instanceId },
+      });
 
-        await this.setInstance({
-          instanceId: instance.id,
-          instanceName: instance.name,
-          integration: instance.integration,
-          token: instance.token,
-          businessId: instance.businessId,
-          connectionStatus: instance.connectionStatus as any, // Pass connection status
-        });
+      await this.setInstance({
+        instanceId: instance.id,
+        instanceName: instance.name,
+        integration: instance.integration,
+        token: instance.token,
+        businessId: instance.businessId,
+        connectionStatus: instance.connectionStatus as any, // Pass connection status
+      });
     });
   }
 
-  private async loadInBatches<T>(
-    items: T[],
-    load: (item: T) => Promise<void>,
-  ): Promise<void> {
-    const { INSTANCE_LOAD_CONCURRENCY: concurrency } =
-      this.configService.get<Startup>('STARTUP');
+  private async loadInBatches<T>(items: T[], load: (item: T) => Promise<void>): Promise<void> {
+    const { INSTANCE_LOAD_CONCURRENCY: concurrency } = this.configService.get<Startup>('STARTUP');
 
     for (let index = 0; index < items.length; index += concurrency) {
       await Promise.all(items.slice(index, index + concurrency).map(load));

@@ -759,10 +759,7 @@ export class ConfigService {
         : true,
       STARTUP: {
         INSTANCE_LOAD_CONCURRENCY: (() => {
-          const value = Number.parseInt(
-            process.env.INSTANCE_LOAD_CONCURRENCY || '10',
-            10,
-          );
+          const value = Number.parseInt(process.env.INSTANCE_LOAD_CONCURRENCY || '10', 10);
           return Number.isFinite(value) ? Math.max(1, value) : 10;
         })(),
       },

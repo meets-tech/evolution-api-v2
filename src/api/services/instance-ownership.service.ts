@@ -1,7 +1,7 @@
-import { InstanceOwnership, ConfigService } from '@config/env.config';
+import { redisClient } from '@cache/rediscache.client';
+import { ConfigService, InstanceOwnership } from '@config/env.config';
 import { Logger } from '@config/logger.config';
 import { randomUUID } from 'crypto';
-import { redisClient } from '@cache/rediscache.client';
 
 type OwnerLease = {
   nodeId: string;
