@@ -23,7 +23,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: evoapicloud/evolution-api
-          tags: homolog
+          tags: |
+            type=raw,value=homolog
+            type=raw,value=dev
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

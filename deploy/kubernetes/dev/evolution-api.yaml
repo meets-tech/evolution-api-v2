@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: evolution-dev-instances
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: oci-bv
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evolution-api-dev
+spec:
+  selector:
+    app: evolution-api-dev
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evolution-api-dev
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: evolution-api-dev
+  template:
+    metadata:
+      labels:
+        app: evolution-api-dev
+    spec:
+      nodeSelector:
+        env: dev
+        alloc: apps
+        kubernetes.io/arch: amd64
+      containers:
+        - name: evolution-api
+          image: evoapicloud/evolution-api:dev
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SERVER_TYPE
+              value: http
+            - name: SERVER_PORT
+              value: "8080"
+            - name: SERVER_URL
+              value: http://evolution-api-dev.dev.svc.cluster.local:8080
+            - name: CORS_ORIGIN
+              value: https://whatsapp-evolution.crmdev.com.br
+            - name: AUTHENTICATION_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: evolution-dev-secrets
+                  key: AUTHENTICATION_API_KEY
+            - name: DATABASE_ENABLED
+              value: "true"
+            - name: DATABASE_PROVIDER
+              value: postgresql
+            - name: DATABASE_CONNECTION_URI
+              valueFrom:
+                secretKeyRef:
+                  name: evolution-dev-secrets
+                  key: DATABASE_CONNECTION_URI
+            - name: DATABASE_CONNECTION_CLIENT_NAME
+              value: evolution_dev
+            - name: DATABASE_SAVE_DATA_INSTANCE
+              value: "true"
+            - name: CACHE_REDIS_ENABLED
+              value: "true"
+            - name: CACHE_REDIS_URI
+              valueFrom:
+                secretKeyRef:
+                  name: evolution-dev-secrets
+                  key: CACHE_REDIS_URI
+            - name: CACHE_REDIS_PREFIX_KEY
+              value: evolution_dev
+            - name: CACHE_REDIS_SAVE_INSTANCES
+              value: "false"
+            - name: CACHE_LOCAL_ENABLED
+              value: "false"
+            - name: DEL_INSTANCE
+              value: "false"
+            - name: INSTANCE_LOAD_CONCURRENCY
+              value: "10"
+            - name: EVOLUTION_OWNERSHIP_ENABLED
+              value: "false"
+            - name: WEBHOOK_GLOBAL_ENABLED
+              value: "false"
+            - name: WEBSOCKET_ENABLED
+              value: "false"
+            - name: TELEMETRY_ENABLED
+              value: "false"
+            - name: CONFIG_SESSION_PHONE_CLIENT
+              value: Meets DEV
+            - name: CONFIG_SESSION_PHONE_NAME
+              value: Chrome
+            - name: QRCODE_LIMIT
+              value: "30"
+            - name: LOG_LEVEL
+              value: ERROR,WARN,INFO,WEBHOOKS
+            - name: LOG_BAILEYS
+              value: error
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1536Mi
+          volumeMounts:
+            - name: instances
+              mountPath: /evolution/instances
+      volumes:
+        - name: instances
+          persistentVolumeClaim:
+            claimName: evolution-dev-instances
