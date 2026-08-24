@@ -27,6 +27,13 @@
 
 ---
 
+## Meets deployment
+
+The Meets integration publishes the provider image from `develop`, `homolog`,
+and `main`. Infrastructure provisioning is intentionally managed outside this
+repository so the provider does not introduce dedicated databases, caches,
+proxies, or Kubernetes resources without an approved environment plan.
+
 ## About
 
 **Evolution API** is a powerful, production-ready REST API for WhatsApp and multi-channel messaging. Originally focused on WhatsApp, it has grown into a comprehensive platform supporting multiple messaging providers and integrations.
