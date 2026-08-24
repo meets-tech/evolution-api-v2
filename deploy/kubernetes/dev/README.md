@@ -33,3 +33,11 @@ kubectl -n dev rollout status deployment/evolution-api-dev
 Use a imagem `evoapicloud/evolution-api:dev`, publicada pela branch `develop`.
 Não habilite ownership nem aumente réplicas da Evolution no DEV enquanto não
 existirem dois nós e Redis HA com o teste de failover aprovado.
+
+## Perfil de custo
+
+O ambiente é deliberadamente enxuto: uma réplica de cada serviço, sem HPA nem
+Ingress da Evolution, com volumes de 5 GiB (sessões), 5 GiB (PostgreSQL) e 1
+GiB (Redis). Aumentos de armazenamento, CPU, memória ou réplicas devem ser
+precedidos por métricas de uso e uma necessidade validada; DEV não deve
+reproduzir o perfil de capacidade de homologação ou produção.

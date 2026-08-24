@@ -7,7 +7,7 @@ spec:
   storageClassName: oci-bv
   resources:
     requests:
-      storage: 20Gi
+      storage: 5Gi
 ---
 apiVersion: v1
 kind: Service
@@ -126,11 +126,11 @@ spec:
             failureThreshold: 5
           resources:
             requests:
-              cpu: 200m
-              memory: 512Mi
+              cpu: 100m
+              memory: 384Mi
             limits:
-              cpu: "1"
-              memory: 1536Mi
+              cpu: 500m
+              memory: 1Gi
           volumeMounts:
             - name: instances
               mountPath: /evolution/instances
