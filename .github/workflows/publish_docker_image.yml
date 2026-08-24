@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - develop
+      - homolog
     tags:
       - "*.*.*"
 
@@ -28,8 +29,8 @@ jobs:
           images: evoapicloud/evolution-api
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=stable,enable=${{ startsWith(github.ref, 'refs/tags/') }}
-            type=raw,value=hlg,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=stable,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=hlg,enable=${{ github.ref == 'refs/heads/homolog' }}
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
 
       - name: Set up QEMU
