@@ -1,0 +1,5 @@
+nodeEnv:
+  - name: EVOLUTION_NODE_ID
+    value: evolution-hlg-a
+  - name: EVOLUTION_NODE_BASE_URL
+    value: http://evolution-api-hlg-a.hlg.svc.cluster.local:8080

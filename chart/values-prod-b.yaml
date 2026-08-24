@@ -1,0 +1,5 @@
+nodeEnv:
+  - name: EVOLUTION_NODE_ID
+    value: evolution-prod-b
+  - name: EVOLUTION_NODE_BASE_URL
+    value: http://evolution-api-prod-b.prod.svc.cluster.local:8080
