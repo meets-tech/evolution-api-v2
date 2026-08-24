@@ -22,6 +22,10 @@ env:
   - name: CACHE_LOCAL_ENABLED
     value: 'false'
   - name: EVOLUTION_OWNERSHIP_ENABLED
-    value: 'false'
+    value: 'true'
+  - name: EVOLUTION_OWNERSHIP_LEASE_TTL_MS
+    value: '90000'
+  - name: EVOLUTION_OWNERSHIP_RENEW_INTERVAL_MS
+    value: '30000'
   - name: TELEMETRY_ENABLED
     value: 'false'

@@ -19,3 +19,4 @@ resources:
     memory: 1Gi
 
 env: []
+nodeEnv: []
