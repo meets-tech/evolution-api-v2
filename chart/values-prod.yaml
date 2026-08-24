@@ -1,0 +1,34 @@
+environment: prod
+image:
+  tag: stable
+secretName: evolution-api-prod-secrets
+resources:
+  requests:
+    cpu: 250m
+    memory: 768Mi
+  limits:
+    cpu: '1'
+    memory: 1536Mi
+env:
+  - name: SERVER_TYPE
+    value: http
+  - name: SERVER_PORT
+    value: '8080'
+  - name: DATABASE_ENABLED
+    value: 'true'
+  - name: DATABASE_PROVIDER
+    value: mysql
+  - name: DATABASE_CONNECTION_CLIENT_NAME
+    value: evolution_prod
+  - name: CACHE_REDIS_ENABLED
+    value: 'true'
+  - name: CACHE_REDIS_PREFIX_KEY
+    value: 'evolution:prod'
+  - name: CACHE_REDIS_SAVE_INSTANCES
+    value: 'false'
+  - name: CACHE_LOCAL_ENABLED
+    value: 'false'
+  - name: EVOLUTION_OWNERSHIP_ENABLED
+    value: 'false'
+  - name: TELEMETRY_ENABLED
+    value: 'false'
