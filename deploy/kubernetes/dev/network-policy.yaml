@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: evolution-api-dev-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: evolution-api-dev
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: meets-whatsapp-evolution-dev
+      ports:
+        - protocol: TCP
+          port: 8080

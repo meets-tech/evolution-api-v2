@@ -3,7 +3,15 @@ import { ProviderFiles } from '@api/provider/sessions';
 import { PrismaRepository } from '@api/repository/repository.service';
 import { channelController } from '@api/server.module';
 import { Events, Integration } from '@api/types/wa.types';
-import { CacheConf, Chatwoot, ConfigService, Database, DelInstance, ProviderSession } from '@config/env.config';
+import {
+  CacheConf,
+  Chatwoot,
+  ConfigService,
+  Database,
+  DelInstance,
+  ProviderSession,
+  Startup,
+} from '@config/env.config';
 import { Logger } from '@config/logger.config';
 import { INSTANCE_DIR, STORE_DIR } from '@config/path.config';
 import { NotFoundException } from '@exceptions';
@@ -13,6 +21,7 @@ import { rmSync } from 'fs';
 import { join } from 'path';
 
 import { CacheService } from './cache.service';
+import { InstanceOwnershipService } from './instance-ownership.service';
 
 export class WAMonitoringService {
   constructor(
@@ -23,6 +32,7 @@ export class WAMonitoringService {
     private readonly cache: CacheService,
     private readonly chatwootCache: CacheService,
     private readonly baileysCache: CacheService,
+    private readonly ownership: InstanceOwnershipService,
   ) {
     this.removeInstance();
     this.noConnection();
@@ -271,6 +281,10 @@ export class WAMonitoringService {
   }
 
   private async setInstance(instanceData: InstanceDto) {
+    if (!(await this.ownership.acquire(instanceData.instanceName))) {
+      this.logger.warn(`Skipping instance "${instanceData.instanceName}" because another node owns it`);
+      return;
+    }
     const instance = channelController.init(instanceData, {
       configService: this.configService,
       eventEmitter: this.eventEmitter,
@@ -281,7 +295,10 @@ export class WAMonitoringService {
       providerFiles: this.providerFiles,
     });
 
-    if (!instance) return;
+    if (!instance) {
+      await this.ownership.release(instanceData.instanceName);
+      return;
+    }
 
     instance.setInstance({
       instanceId: instanceData.instanceId,
@@ -305,35 +322,38 @@ export class WAMonitoringService {
     }
 
     this.waInstances[instanceData.instanceName] = instance;
+    this.ownership.startRenewal(instanceData.instanceName, async () => {
+      this.logger.error(`Lost ownership of instance "${instanceData.instanceName}"`);
+      await this.waInstances[instanceData.instanceName]?.client?.logout('Lost Evolution ownership');
+      delete this.waInstances[instanceData.instanceName];
+    });
   }
 
   private async loadInstancesFromRedis() {
     const keys = await this.cache.keys();
 
     if (keys?.length > 0) {
-      await Promise.all(
-        keys.map(async (k) => {
-          const instanceData = await this.prismaRepository.instance.findUnique({
-            where: { id: k.split(':')[1] },
-          });
+      await this.loadInBatches(keys, async (k) => {
+        const instanceData = await this.prismaRepository.instance.findUnique({
+          where: { id: k.split(':')[1] },
+        });
 
-          if (!instanceData) {
-            return;
-          }
+        if (!instanceData) {
+          return;
+        }
 
-          const instance = {
-            instanceId: k.split(':')[1],
-            instanceName: k.split(':')[2],
-            integration: instanceData.integration,
-            token: instanceData.token,
-            number: instanceData.number,
-            businessId: instanceData.businessId,
-            connectionStatus: instanceData.connectionStatus as any, // Pass connection status
-          };
+        const instance = {
+          instanceId: k.split(':')[1],
+          instanceName: k.split(':')[2],
+          integration: instanceData.integration,
+          token: instanceData.token,
+          number: instanceData.number,
+          businessId: instanceData.businessId,
+          connectionStatus: instanceData.connectionStatus as any, // Pass connection status
+        };
 
-          this.setInstance(instance);
-        }),
-      );
+        await this.setInstance(instance);
+      });
     }
   }
 
@@ -348,20 +368,18 @@ export class WAMonitoringService {
       return;
     }
 
-    await Promise.all(
-      instances.map(async (instance) => {
-        this.setInstance({
-          instanceId: instance.id,
-          instanceName: instance.name,
-          integration: instance.integration,
-          token: instance.token,
-          number: instance.number,
-          businessId: instance.businessId,
-          ownerJid: instance.ownerJid,
-          connectionStatus: instance.connectionStatus as any, // Pass connection status
-        });
-      }),
-    );
+    await this.loadInBatches(instances, async (instance) => {
+      await this.setInstance({
+        instanceId: instance.id,
+        instanceName: instance.name,
+        integration: instance.integration,
+        token: instance.token,
+        number: instance.number,
+        businessId: instance.businessId,
+        ownerJid: instance.ownerJid,
+        connectionStatus: instance.connectionStatus as any, // Pass connection status
+      });
+    });
   }
 
   private async loadInstancesFromProvider() {
@@ -371,22 +389,28 @@ export class WAMonitoringService {
       return;
     }
 
-    await Promise.all(
-      instances?.data?.map(async (instanceId: string) => {
-        const instance = await this.prismaRepository.instance.findUnique({
-          where: { id: instanceId },
-        });
+    await this.loadInBatches(instances.data, async (instanceId: string) => {
+      const instance = await this.prismaRepository.instance.findUnique({
+        where: { id: instanceId },
+      });
 
-        this.setInstance({
-          instanceId: instance.id,
-          instanceName: instance.name,
-          integration: instance.integration,
-          token: instance.token,
-          businessId: instance.businessId,
-          connectionStatus: instance.connectionStatus as any, // Pass connection status
-        });
-      }),
-    );
+      await this.setInstance({
+        instanceId: instance.id,
+        instanceName: instance.name,
+        integration: instance.integration,
+        token: instance.token,
+        businessId: instance.businessId,
+        connectionStatus: instance.connectionStatus as any, // Pass connection status
+      });
+    });
+  }
+
+  private async loadInBatches<T>(items: T[], load: (item: T) => Promise<void>): Promise<void> {
+    const { INSTANCE_LOAD_CONCURRENCY: concurrency } = this.configService.get<Startup>('STARTUP');
+
+    for (let index = 0; index < items.length; index += concurrency) {
+      await Promise.all(items.slice(index, index + concurrency).map(load));
+    }
   }
 
   private removeInstance() {
@@ -404,6 +428,7 @@ export class WAMonitoringService {
 
       try {
         delete this.waInstances[instanceName];
+        await this.ownership.release(instanceName);
       } catch (error) {
         this.logger.error(error);
       }

@@ -389,6 +389,18 @@ export type EventEmitter = {
   MAX_LISTENERS: number;
 };
 
+export type Startup = {
+  INSTANCE_LOAD_CONCURRENCY: number;
+};
+
+export type InstanceOwnership = {
+  ENABLED: boolean;
+  NODE_ID: string;
+  NODE_BASE_URL: string;
+  LEASE_TTL_MS: number;
+  RENEW_INTERVAL_MS: number;
+};
+
 export type Production = boolean;
 
 export interface Env {
@@ -406,6 +418,7 @@ export interface Env {
   LOG: Log;
   DEL_INSTANCE: DelInstance;
   DEL_TEMP_INSTANCES: boolean;
+  OWNERSHIP: InstanceOwnership;
   LANGUAGE: Language;
   WEBHOOK: Webhook;
   PUSHER: Pusher;
@@ -428,6 +441,7 @@ export interface Env {
   FACEBOOK: Facebook;
   SENTRY: Sentry;
   EVENT_EMITTER: EventEmitter;
+  STARTUP: Startup;
   PRODUCTION?: Production;
 }
 
@@ -743,6 +757,19 @@ export class ConfigService {
       DEL_TEMP_INSTANCES: isBooleanString(process.env?.DEL_TEMP_INSTANCES)
         ? process.env.DEL_TEMP_INSTANCES === 'true'
         : true,
+      STARTUP: {
+        INSTANCE_LOAD_CONCURRENCY: (() => {
+          const value = Number.parseInt(process.env.INSTANCE_LOAD_CONCURRENCY || '10', 10);
+          return Number.isFinite(value) ? Math.max(1, value) : 10;
+        })(),
+      },
+      OWNERSHIP: {
+        ENABLED: process.env?.EVOLUTION_OWNERSHIP_ENABLED === 'true',
+        NODE_ID: process.env?.EVOLUTION_NODE_ID || '',
+        NODE_BASE_URL: process.env?.EVOLUTION_NODE_BASE_URL || '',
+        LEASE_TTL_MS: Number.parseInt(process.env?.EVOLUTION_OWNERSHIP_LEASE_TTL_MS || '90000', 10),
+        RENEW_INTERVAL_MS: Number.parseInt(process.env?.EVOLUTION_OWNERSHIP_RENEW_INTERVAL_MS || '30000', 10),
+      },
       LANGUAGE: process.env?.LANGUAGE || 'en',
       WEBHOOK: {
         GLOBAL: {
