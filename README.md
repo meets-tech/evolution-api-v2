@@ -27,13 +27,12 @@
 
 ---
 
-## Meets homologation
+## Meets deployment
 
-The isolated Meets homologation deployment (dedicated PostgreSQL, Redis,
-persistent sessions, and automatic HTTPS) is documented in
-[`deploy/homolog/README.md`](deploy/homolog/README.md). The Central must access
-this API through the `meets-whatsapp-evolution` middleware; credentials and
-instance names must not be exposed to frontend clients.
+The Meets integration publishes the provider image from `develop`, `homolog`,
+and `main`. Infrastructure provisioning is intentionally managed outside this
+repository so the provider does not introduce dedicated databases, caches,
+proxies, or Kubernetes resources without an approved environment plan.
 
 ## About
 
