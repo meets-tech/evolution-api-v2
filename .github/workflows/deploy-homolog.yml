@@ -2,6 +2,9 @@ name: Deploy Evolution API - HOMOLOG
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - homolog
 
 permissions:
   contents: read
