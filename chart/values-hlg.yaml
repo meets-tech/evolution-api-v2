@@ -10,7 +10,7 @@ env:
   - name: DATABASE_ENABLED
     value: 'true'
   - name: DATABASE_PROVIDER
-    value: mysql
+    value: postgresql
   - name: DATABASE_CONNECTION_CLIENT_NAME
     value: evolution_hlg
   - name: CACHE_REDIS_ENABLED

@@ -1,15 +1,14 @@
 # Meets deployment
 
 This chart deploys an internal Evolution provider node. It creates only a
-`Deployment` and a `ClusterIP` Service. PostgreSQL, MySQL, Redis, volumes,
+`Deployment` and a `ClusterIP` Service. PostgreSQL, Redis, volumes,
 Ingress, HPA, namespaces and Secrets are intentionally external resources.
 
 ## Prerequisites
 
-For each environment, Infrastructure must provision a dedicated MySQL database
-and user, and grant the existing Redis service access to the `evolution:<env>`
-key prefix. Create the Kubernetes Secret from the approved secret manager; do
-not commit its values.
+For each environment, Infrastructure must provision a dedicated PostgreSQL
+database and a dedicated Redis service for Evolution. Create the Kubernetes
+Secret from the approved secret manager; do not commit its values.
 
 The Secret must contain these keys:
 
@@ -26,8 +25,8 @@ kubectl -n dev create secret generic evolution-api-dev-secrets \
   --from-env-file=/secure/path/evolution-dev.env
 ```
 
-The database URI must select MySQL and the environment database, for example
-`mysql://<user>:<password>@<host>:3306/evolution_dev`.
+The database URI must select PostgreSQL and the environment database, for
+example `postgresql://<user>:<password>@<host>:5432/evolution_dev`.
 
 ## Deploy
 
