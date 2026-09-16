@@ -5119,4 +5119,19 @@ export class BaileysStartupService extends ChannelStartupService {
       },
     };
   }
+
+  public async fetchMessageHistory(data: { count?: number; key: proto.IMessageKey; messageTimestamp: number }) {
+    if (!this.client) {
+      throw new BadRequestException('WhatsApp connection is not available');
+    }
+    const count = Math.min(Math.max(Number(data.count) || 50, 1), 100);
+    const requestId = await this.client.fetchMessageHistory(count, data.key, Number(data.messageTimestamp));
+
+    return {
+      status: 'requested',
+      requestId,
+      count,
+      remoteJid: data.key.remoteJid,
+    };
+  }
 }
