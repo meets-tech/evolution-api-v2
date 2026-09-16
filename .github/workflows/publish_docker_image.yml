@@ -8,141 +8,51 @@ on:
       - homolog
     tags:
       - "*.*.*"
-  workflow_dispatch:
-
-env:
-  APP_NAME: evolution-api-v2
-  OCI_REGION: ${{ secrets.OCI_REGION }}
-  OCI_TENANCY_NAME: ${{ secrets.OCI_TENANCY_NAME }}
-  OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
-  OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
-  OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-  OCI_AUTH_TOKEN: ${{ secrets.OCI_AUTH_TOKEN }}
-  OCI_REGISTRY_USERNAME: ${{ secrets.OCI_REGISTRY_USERNAME }}
-  OCI_KEY_CONTENT: ${{ secrets.OCI_KEY_CONTENT }}
 
 jobs:
   build_deploy:
     name: Build and Deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           submodules: recursive
 
-      - name: Validate required OCI secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          required_vars=(
-            OCI_REGION
-            OCI_TENANCY_NAME
-            OCI_TENANCY_OCID
-            OCI_USER_OCID
-            OCI_FINGERPRINT
-            OCI_AUTH_TOKEN
-            OCI_REGISTRY_USERNAME
-            OCI_KEY_CONTENT
-          )
-          missing=()
-          for var_name in "${required_vars[@]}"; do
-            if [ -z "${!var_name:-}" ]; then
-              missing+=("$var_name")
-            fi
-          done
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "Secrets OCI ausentes ou vazios: ${missing[*]}"
-            exit 1
-          fi
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: evoapicloud/evolution-api
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=stable,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=hlg,enable=${{ github.ref == 'refs/heads/homolog' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
 
-      - name: Select image tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          case "${GITHUB_REF}" in
-            refs/heads/develop) image_tag=dev ;;
-            refs/heads/homolog) image_tag=hlg ;;
-            refs/heads/main) image_tag=stable ;;
-            refs/tags/*) image_tag="${GITHUB_REF_NAME}" ;;
-            *) echo "Unsupported ref: ${GITHUB_REF}"; exit 1 ;;
-          esac
-          echo "IMAGE_TAG=${image_tag}" >> "${GITHUB_ENV}"
-          echo "IMAGE_REPOSITORY=${OCI_REGION}.ocir.io/${OCI_TENANCY_NAME}/${APP_NAME}" >> "${GITHUB_ENV}"
-
-      - name: Login to OCIR
-        shell: bash
-        run: echo "$OCI_AUTH_TOKEN" | docker login "$OCI_REGION.ocir.io" -u "$OCI_TENANCY_NAME/$OCI_REGISTRY_USERNAME" --password-stdin
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
       - name: Build and push
+        id: docker_build
         uses: docker/build-push-action@v6
         with:
-          context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.IMAGE_REPOSITORY }}:${{ env.IMAGE_TAG }}
-            ${{ env.IMAGE_REPOSITORY }}:${{ env.IMAGE_TAG }}-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Install deploy dependencies
-        if: github.ref == 'refs/heads/develop'
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y python3-pip
-          pip install --user oci-cli
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          curl -fsSLo kubectl https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/kubectl
-
-      - name: Configure OCI CLI
-        if: github.ref == 'refs/heads/develop'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.oci" "$HOME/deploy"
-          printf '%s' "$OCI_KEY_CONTENT" > "$HOME/.oci/key.pem"
-          chmod 600 "$HOME/.oci/key.pem"
-          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s/.oci/key.pem\n' \
-            "$OCI_USER_OCID" "$OCI_FINGERPRINT" "$OCI_TENANCY_OCID" "$OCI_REGION" "$HOME" \
-            > "$HOME/.oci/config"
-          oci ce cluster create-kubeconfig \
-            --cluster-id ocid1.cluster.oc1.sa-saopaulo-1.aaaaaaaayfipxslug2sqmhabf2awn2orqtxndfb4jwgibxs2ychksphb5veq \
-            --file "$HOME/deploy/config" \
-            --region "$OCI_REGION" \
-            --token-version 2.0.0
-
-      - name: Configure private OCIR pull secret
-        if: github.ref == 'refs/heads/develop'
-        shell: bash
-        run: |
-          set -euo pipefail
-          export KUBECONFIG="$HOME/deploy/config"
-          kubectl -n dev create secret docker-registry evolution-api-ocir-pull \
-            --docker-server="$OCI_REGION.ocir.io" \
-            --docker-username="$OCI_TENANCY_NAME/$OCI_REGISTRY_USERNAME" \
-            --docker-password="$OCI_AUTH_TOKEN" \
-            --dry-run=client \
-            -o yaml | kubectl apply -f -
-          kubectl -n dev patch deployment evolution-api --type=strategic \
-            -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"evolution-api-ocir-pull"}]}}}}'
-
-      - name: Update existing DEV deployment image
-        if: github.ref == 'refs/heads/develop'
-        shell: bash
-        run: |
-          set -euo pipefail
-          export KUBECONFIG="$HOME/deploy/config"
-          kubectl -n dev set image deployment/evolution-api \
-            evolution-api="$IMAGE_REPOSITORY:$IMAGE_TAG"
-          kubectl -n dev rollout status deployment/evolution-api --timeout=10m
-          deployed_image="$(kubectl -n dev get deployment evolution-api \
-            -o jsonpath='{.spec.template.spec.containers[?(@.name=="evolution-api")].image}')"
-          test "$deployed_image" = "$IMAGE_REPOSITORY:$IMAGE_TAG"
+      - name: Image digest
+        run: echo ${{ steps.docker_build.outputs.digest }}
