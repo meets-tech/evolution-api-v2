@@ -119,6 +119,21 @@ jobs:
             --region "$OCI_REGION" \
             --token-version 2.0.0
 
+      - name: Configure private OCIR pull secret
+        if: github.ref == 'refs/heads/develop'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export KUBECONFIG="$HOME/deploy/config"
+          kubectl -n dev create secret docker-registry evolution-api-ocir-pull \
+            --docker-server="$OCI_REGION.ocir.io" \
+            --docker-username="$OCI_TENANCY_NAME/$OCI_REGISTRY_USERNAME" \
+            --docker-password="$OCI_AUTH_TOKEN" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+          kubectl -n dev patch deployment evolution-api --type=strategic \
+            -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"evolution-api-ocir-pull"}]}}}}'
+
       - name: Update existing DEV deployment image
         if: github.ref == 'refs/heads/develop'
         shell: bash
@@ -128,3 +143,6 @@ jobs:
           kubectl -n dev set image deployment/evolution-api \
             evolution-api="$IMAGE_REPOSITORY:$IMAGE_TAG"
           kubectl -n dev rollout status deployment/evolution-api --timeout=10m
+          deployed_image="$(kubectl -n dev get deployment evolution-api \
+            -o jsonpath='{.spec.template.spec.containers[?(@.name=="evolution-api")].image}')"
+          test "$deployed_image" = "$IMAGE_REPOSITORY:$IMAGE_TAG"
