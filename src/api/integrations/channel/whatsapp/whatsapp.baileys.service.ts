@@ -5129,8 +5129,7 @@ export class BaileysStartupService extends ChannelStartupService {
     if (!Number.isFinite(suppliedTimestamp)) {
       throw new BadRequestException('messageTimestamp is required to fetch message history');
     }
-    const messageTimestamp =
-      suppliedTimestamp < 100_000_000_000 ? suppliedTimestamp * 1_000 : suppliedTimestamp;
+    const messageTimestamp = suppliedTimestamp < 100_000_000_000 ? suppliedTimestamp * 1_000 : suppliedTimestamp;
     const requestId = await this.client.fetchMessageHistory(count, data.key, Math.floor(messageTimestamp));
 
     return {
