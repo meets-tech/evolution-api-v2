@@ -5125,7 +5125,13 @@ export class BaileysStartupService extends ChannelStartupService {
       throw new BadRequestException('WhatsApp connection is not available');
     }
     const count = Math.min(Math.max(Number(data.count) || 50, 1), 100);
-    const requestId = await this.client.fetchMessageHistory(count, data.key, Number(data.messageTimestamp));
+    const suppliedTimestamp = Number(data.messageTimestamp);
+    if (!Number.isFinite(suppliedTimestamp)) {
+      throw new BadRequestException('messageTimestamp is required to fetch message history');
+    }
+    const messageTimestamp =
+      suppliedTimestamp < 100_000_000_000 ? suppliedTimestamp * 1_000 : suppliedTimestamp;
+    const requestId = await this.client.fetchMessageHistory(count, data.key, Math.floor(messageTimestamp));
 
     return {
       status: 'requested',
