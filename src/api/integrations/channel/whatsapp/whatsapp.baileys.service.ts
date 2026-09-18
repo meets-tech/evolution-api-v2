@@ -1030,7 +1030,7 @@ export class BaileysStartupService extends ChannelStartupService {
             }
           }
 
-          if (messagesRepository?.has(m.key.id)) {
+          if (syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND && messagesRepository?.has(m.key.id)) {
             continue;
           }
 
