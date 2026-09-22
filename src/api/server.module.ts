@@ -40,6 +40,7 @@ import { S3Service } from './integrations/storage/s3/services/s3.service';
 import { ProviderFiles } from './provider/sessions';
 import { PrismaRepository } from './repository/repository.service';
 import { CacheService } from './services/cache.service';
+import { InstanceOwnershipService } from './services/instance-ownership.service';
 import { WAMonitoringService } from './services/monitor.service';
 import { ProxyService } from './services/proxy.service';
 import { SettingsService } from './services/settings.service';
@@ -54,6 +55,7 @@ if (configService.get<Chatwoot>('CHATWOOT').ENABLED) {
 
 export const cache = new CacheService(new CacheEngine(configService, 'instance').getEngine());
 const baileysCache = new CacheService(new CacheEngine(configService, 'baileys').getEngine());
+const instanceOwnership = new InstanceOwnershipService(configService);
 
 let providerFiles: ProviderFiles = null;
 if (configService.get<ProviderSession>('PROVIDER').ENABLED) {
@@ -70,6 +72,7 @@ export const waMonitor = new WAMonitoringService(
   cache,
   chatwootCache,
   baileysCache,
+  instanceOwnership,
 );
 
 const s3Service = new S3Service(prismaRepository);
