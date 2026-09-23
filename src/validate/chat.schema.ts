@@ -241,6 +241,26 @@ export const messageValidateSchema: JSONSchema7 = {
   },
 };
 
+export const fetchMessageHistorySchema: JSONSchema7 = {
+  $id: v4(),
+  type: 'object',
+  required: ['key', 'messageTimestamp'],
+  properties: {
+    count: { type: 'integer', minimum: 1, maximum: 100 },
+    messageTimestamp: { type: 'integer', minimum: 1 },
+    key: {
+      type: 'object',
+      required: ['id', 'remoteJid'],
+      properties: {
+        id: { type: 'string', minLength: 1 },
+        remoteJid: { type: 'string', minLength: 1 },
+        fromMe: { type: 'boolean' },
+        participant: { type: 'string' },
+      },
+    },
+  },
+};
+
 export const messageUpSchema: JSONSchema7 = {
   $id: v4(),
   type: 'object',

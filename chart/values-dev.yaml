@@ -13,6 +13,14 @@ env:
     value: postgresql
   - name: DATABASE_CONNECTION_CLIENT_NAME
     value: evolution_dev
+  # Required by the gateway's paginated history/media synchronization.
+  # Data remains isolated in the existing DEV PostgreSQL instance.
+  - name: DATABASE_SAVE_DATA_NEW_MESSAGE
+    value: 'true'
+  - name: DATABASE_SAVE_MESSAGE_UPDATE
+    value: 'true'
+  - name: DATABASE_SAVE_DATA_HISTORIC
+    value: 'true'
   - name: CACHE_REDIS_ENABLED
     value: 'true'
   - name: CACHE_REDIS_PREFIX_KEY

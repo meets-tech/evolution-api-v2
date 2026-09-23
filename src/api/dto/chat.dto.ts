@@ -22,6 +22,12 @@ export class getBase64FromMediaMessageDto {
   convertToMp4?: boolean;
 }
 
+export class FetchMessageHistoryDto {
+  count?: number;
+  key: proto.IMessageKey;
+  messageTimestamp: number;
+}
+
 export class WhatsAppNumberDto {
   numbers: string[];
 }
