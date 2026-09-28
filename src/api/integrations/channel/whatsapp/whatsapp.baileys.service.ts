@@ -1030,7 +1030,7 @@ export class BaileysStartupService extends ChannelStartupService {
             }
           }
 
-          if (messagesRepository?.has(m.key.id)) {
+          if (syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND && messagesRepository?.has(m.key.id)) {
             continue;
           }
 
@@ -5117,6 +5117,26 @@ export class BaileysStartupService extends ChannelStartupService {
         currentPage: query.page,
         records: formattedMessages,
       },
+    };
+  }
+
+  public async fetchMessageHistory(data: { count?: number; key: proto.IMessageKey; messageTimestamp: number }) {
+    if (!this.client) {
+      throw new BadRequestException('WhatsApp connection is not available');
+    }
+    const count = Math.min(Math.max(Number(data.count) || 50, 1), 100);
+    const suppliedTimestamp = Number(data.messageTimestamp);
+    if (!Number.isFinite(suppliedTimestamp)) {
+      throw new BadRequestException('messageTimestamp is required to fetch message history');
+    }
+    const messageTimestamp = suppliedTimestamp < 100_000_000_000 ? suppliedTimestamp * 1_000 : suppliedTimestamp;
+    const requestId = await this.client.fetchMessageHistory(count, data.key, Math.floor(messageTimestamp));
+
+    return {
+      status: 'requested',
+      requestId,
+      count,
+      remoteJid: data.key.remoteJid,
     };
   }
 }
