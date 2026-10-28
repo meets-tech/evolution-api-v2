@@ -11,6 +11,7 @@ import {
   OnWhatsAppDto,
   PrivacySettingDto,
   ReadMessageDto,
+  ResolveLidDto,
   SendPresenceDto,
   UpdateMessageDto,
   WhatsAppNumberDto,
@@ -3678,6 +3679,14 @@ export class BaileysStartupService extends ChannelStartupService {
     }
 
     return onWhatsapp;
+  }
+
+  public async resolveLid(data: ResolveLidDto) {
+    const phone = await this.client.signalRepository.lidMapping.getPNForLID(data.lid);
+    return {
+      lid: data.lid,
+      phone: phone ? jidNormalizedUser(phone) : null,
+    };
   }
 
   public async markMessageAsRead(data: ReadMessageDto) {
