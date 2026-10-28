@@ -32,6 +32,10 @@ export class WhatsAppNumberDto {
   numbers: string[];
 }
 
+export class ResolveLidDto {
+  lid: string;
+}
+
 export class NumberDto {
   number: string;
 }
