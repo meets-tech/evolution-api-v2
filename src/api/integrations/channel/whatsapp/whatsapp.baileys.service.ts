@@ -83,6 +83,7 @@ import { createId as cuid } from '@paralleldrive/cuid2';
 import { Instance, Message } from '@prisma/client';
 import { createJid } from '@utils/createJid';
 import { fetchLatestWaWebVersion } from '@utils/fetchLatestWaWebVersion';
+import { normalizeBaileysMessageContent, normalizeLidMessageKey } from '@utils/lidMessageKey';
 import { makeProxyAgent, makeProxyAgentUndici } from '@utils/makeProxyAgent';
 import { getOnWhatsappCache, saveOnWhatsappCache } from '@utils/onWhatsappCache';
 import { status } from '@utils/renderStatus';
@@ -931,6 +932,13 @@ export class BaileysStartupService extends ChannelStartupService {
     },
   };
 
+  private async normalizeMessageKey<T extends ExtendedIMessageKey>(key: T): Promise<T> {
+    return normalizeLidMessageKey(key, {
+      resolve: (lid) => this.client.signalRepository.lidMapping.getPNForLID(lid),
+      store: (pairs) => this.client.signalRepository.lidMapping.storeLIDPNMappings(pairs),
+    });
+  }
+
   private readonly messageHandle = {
     'messaging-history.set': async ({
       messages,
@@ -975,10 +983,18 @@ export class BaileysStartupService extends ChannelStartupService {
         }
 
         const contactsMap = new Map();
+        const normalizedContacts: Contact[] = [];
 
         for (const contact of contacts) {
-          if (contact.id && (contact.notify || contact.name)) {
-            contactsMap.set(contact.id, { name: contact.name ?? contact.notify, jid: contact.id });
+          const normalizedContactId = contact.id
+            ? (await this.normalizeMessageKey({ remoteJid: contact.id })).remoteJid || contact.id
+            : contact.id;
+          const normalizedContact = { ...contact, id: normalizedContactId };
+          normalizedContacts.push(normalizedContact);
+          if (normalizedContactId && (contact.notify || contact.name)) {
+            const contactData = { name: contact.name ?? contact.notify, jid: normalizedContactId };
+            contactsMap.set(contact.id, contactData);
+            contactsMap.set(normalizedContactId, contactData);
           }
         }
 
@@ -990,11 +1006,12 @@ export class BaileysStartupService extends ChannelStartupService {
         );
 
         for (const chat of chats) {
-          if (chatsRepository?.has(chat.id)) {
+          const normalizedChatId = (await this.normalizeMessageKey({ remoteJid: chat.id })).remoteJid || chat.id;
+          if (chatsRepository?.has(normalizedChatId)) {
             continue;
           }
 
-          chatsRaw.push({ remoteJid: chat.id, instanceId: this.instanceId, name: chat.name });
+          chatsRaw.push({ remoteJid: normalizedChatId, instanceId: this.instanceId, name: chat.name });
         }
 
         this.sendDataWebhook(Events.CHATS_SET, chatsRaw);
@@ -1027,6 +1044,9 @@ export class BaileysStartupService extends ChannelStartupService {
           if (!m.message || !m.key || !m.messageTimestamp) {
             continue;
           }
+
+          Object.assign(m.key, await this.normalizeMessageKey(m.key));
+          m.message = normalizeBaileysMessageContent(m.message);
 
           if (Long.isLong(m?.messageTimestamp)) {
             m.messageTimestamp = m.messageTimestamp?.toNumber();
@@ -1076,7 +1096,7 @@ export class BaileysStartupService extends ChannelStartupService {
         }
 
         await this.contactHandle['contacts.upsert'](
-          contacts.filter((c) => !!c.notify || !!c.name).map((c) => ({ id: c.id, name: c.name ?? c.notify })),
+          normalizedContacts.filter((c) => !!c.notify || !!c.name).map((c) => ({ id: c.id, name: c.name ?? c.notify })),
         );
 
         contacts = undefined;
@@ -1110,6 +1130,9 @@ export class BaileysStartupService extends ChannelStartupService {
             this.logger.warn(`Message ignored with messageStubParameters: ${JSON.stringify(received, null, 2)}`);
             continue;
           }
+
+          Object.assign(received.key, await this.normalizeMessageKey(received.key));
+          received.message = normalizeBaileysMessageContent(received.message);
           if (received.message?.conversation || received.message?.extendedTextMessage?.text) {
             const text = received.message?.conversation || received.message?.extendedTextMessage?.text;
 
@@ -1483,9 +1506,6 @@ export class BaileysStartupService extends ChannelStartupService {
           this.logger.verbose(messageRaw);
 
           sendTelemetry(`received.message.${messageRaw.messageType ?? 'unknown'}`);
-          if (messageRaw.key.remoteJid?.includes('@lid') && messageRaw.key.remoteJidAlt) {
-            messageRaw.key.remoteJid = messageRaw.key.remoteJidAlt;
-          }
           console.log(messageRaw);
 
           this.sendDataWebhook(Events.MESSAGES_UPSERT, messageRaw);
@@ -1520,10 +1540,9 @@ export class BaileysStartupService extends ChannelStartupService {
           if (contactRaw.remoteJid.includes('@s.whatsapp') || contactRaw.remoteJid.includes('@lid')) {
             await saveOnWhatsappCache([
               {
-                remoteJid:
-                  messageRaw.key.addressingMode === 'lid' ? messageRaw.key.remoteJidAlt : messageRaw.key.remoteJid,
+                remoteJid: messageRaw.key.remoteJid,
                 remoteJidAlt: messageRaw.key.remoteJidAlt,
-                lid: messageRaw.key.addressingMode === 'lid' ? 'lid' : null,
+                lid: messageRaw.key.remoteJidAlt?.includes('@lid') ? 'lid' : null,
               },
             ]);
           }
@@ -1569,6 +1588,8 @@ export class BaileysStartupService extends ChannelStartupService {
       const readChatToUpdate: Record<string, true> = {}; // {remoteJid: true}
 
       for await (const { key, update } of args) {
+        Object.assign(key, await this.normalizeMessageKey(key));
+
         if (settings?.groupsIgnore && key.remoteJid?.includes('@g.us')) {
           continue;
         }
