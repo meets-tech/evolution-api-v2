@@ -36,6 +36,10 @@ export class ResolveLidDto {
   lid: string;
 }
 
+export class ResolveLidsDto {
+  lids: string[];
+}
+
 export class NumberDto {
   number: string;
 }

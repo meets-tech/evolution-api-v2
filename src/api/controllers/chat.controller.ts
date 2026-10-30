@@ -12,6 +12,7 @@ import {
   ProfileStatusDto,
   ReadMessageDto,
   ResolveLidDto,
+  ResolveLidsDto,
   SendPresenceDto,
   UpdateMessageDto,
   WhatsAppNumberDto,
@@ -34,6 +35,14 @@ export class ChatController {
       return { lid: data.lid, phone: null };
     }
     return await instance.resolveLid(data);
+  }
+
+  public async resolveLids({ instanceName }: InstanceDto, data: ResolveLidsDto) {
+    const instance = this.waMonitor.waInstances[instanceName];
+    if (typeof instance.resolveLids !== 'function') {
+      return { mappings: data.lids.map((lid) => ({ lid, phone: null })) };
+    }
+    return await instance.resolveLids(data);
   }
 
   public async readMessage({ instanceName }: InstanceDto, data: ReadMessageDto) {

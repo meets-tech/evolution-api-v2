@@ -12,6 +12,7 @@ import {
   PrivacySettingDto,
   ReadMessageDto,
   ResolveLidDto,
+  ResolveLidsDto,
   SendPresenceDto,
   UpdateMessageDto,
   WhatsAppNumberDto,
@@ -87,6 +88,7 @@ import { normalizeBaileysMessageContent, normalizeLidMessageKey } from '@utils/l
 import { makeProxyAgent, makeProxyAgentUndici } from '@utils/makeProxyAgent';
 import { getOnWhatsappCache, saveOnWhatsappCache } from '@utils/onWhatsappCache';
 import { status } from '@utils/renderStatus';
+import { resolveLidBatch } from '@utils/resolveLidBatch';
 import { sendTelemetry } from '@utils/sendTelemetry';
 import useMultiFileAuthStatePrisma from '@utils/use-multi-file-auth-state-prisma';
 import { AuthStateProvider } from '@utils/use-multi-file-auth-state-provider-files';
@@ -3703,11 +3705,44 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async resolveLid(data: ResolveLidDto) {
-    const phone = await this.client.signalRepository.lidMapping.getPNForLID(data.lid);
+    const phone = await this.resolveLidPhone(data.lid);
     return {
       lid: data.lid,
-      phone: phone ? jidNormalizedUser(phone) : null,
+      phone,
     };
+  }
+
+  public async resolveLids(data: ResolveLidsDto) {
+    const mappings = await resolveLidBatch(data.lids, (lid) => this.resolveLidPhone(lid));
+    return { mappings };
+  }
+
+  private async resolveLidPhone(lid: string): Promise<string | null> {
+    const storedPhone = await this.client.signalRepository.lidMapping.getPNForLID(lid);
+    if (storedPhone) return jidNormalizedUser(storedPhone);
+    const records = await this.prismaRepository.message.findMany({
+      where: {
+        instanceId: this.instanceId,
+        OR: [
+          { key: { path: ['remoteJid'], equals: lid } },
+          { key: { path: ['remoteJidAlt'], equals: lid } },
+        ],
+      },
+      orderBy: { messageTimestamp: 'desc' },
+      take: 50,
+      select: { key: true },
+    });
+    const phones = new Set<string>();
+    for (const record of records) {
+      const key = record.key as { remoteJid?: string; remoteJidAlt?: string } | null;
+      for (const candidate of [key?.remoteJid, key?.remoteJidAlt]) {
+        if (candidate && isPnUser(candidate)) phones.add(jidNormalizedUser(candidate));
+      }
+    }
+    if (phones.size !== 1) return null;
+    const phone = [...phones][0];
+    await this.client.signalRepository.lidMapping.storeLIDPNMappings([{ lid, pn: phone }]);
+    return phone;
   }
 
   public async markMessageAsRead(data: ReadMessageDto) {
