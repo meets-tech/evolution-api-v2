@@ -3723,10 +3723,7 @@ export class BaileysStartupService extends ChannelStartupService {
     const records = await this.prismaRepository.message.findMany({
       where: {
         instanceId: this.instanceId,
-        OR: [
-          { key: { path: ['remoteJid'], equals: lid } },
-          { key: { path: ['remoteJidAlt'], equals: lid } },
-        ],
+        OR: [{ key: { path: ['remoteJid'], equals: lid } }, { key: { path: ['remoteJidAlt'], equals: lid } }],
       },
       orderBy: { messageTimestamp: 'desc' },
       take: 50,
