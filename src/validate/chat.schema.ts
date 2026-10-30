@@ -53,6 +53,24 @@ export const resolveLidSchema: JSONSchema7 = {
   required: ['lid'],
 };
 
+export const resolveLidsSchema: JSONSchema7 = {
+  $id: v4(),
+  type: 'object',
+  properties: {
+    lids: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 250,
+      uniqueItems: true,
+      items: {
+        type: 'string',
+        pattern: '^[0-9]+@lid$',
+      },
+    },
+  },
+  required: ['lids'],
+};
+
 export const readMessageSchema: JSONSchema7 = {
   $id: v4(),
   type: 'object',
