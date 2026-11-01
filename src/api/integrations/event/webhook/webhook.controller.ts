@@ -103,7 +103,7 @@ export class WebhookController extends EventController implements EventControlle
     };
 
     if (local && instance?.enabled) {
-      if (Array.isArray(webhookLocal) && webhookLocal.includes(we)) {
+      if (Array.isArray(webhookLocal) && (webhookLocal.includes(we) || event === 'lid-mapping.update')) {
         let baseURL: string;
 
         if (instance?.webhookByEvents) {
