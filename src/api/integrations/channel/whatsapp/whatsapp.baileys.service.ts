@@ -84,7 +84,7 @@ import { createId as cuid } from '@paralleldrive/cuid2';
 import { Instance, Message } from '@prisma/client';
 import { createJid } from '@utils/createJid';
 import { fetchLatestWaWebVersion } from '@utils/fetchLatestWaWebVersion';
-import { normalizeBaileysMessageContent, normalizeLidMessageKey } from '@utils/lidMessageKey';
+import { normalizeBaileysMessageContent, normalizeLidMessageKey, normalizeLidPnMapping } from '@utils/lidMessageKey';
 import { makeProxyAgent, makeProxyAgentUndici } from '@utils/makeProxyAgent';
 import { getOnWhatsappCache, saveOnWhatsappCache } from '@utils/onWhatsappCache';
 import { status } from '@utils/renderStatus';
@@ -939,6 +939,18 @@ export class BaileysStartupService extends ChannelStartupService {
       resolve: (lid) => this.client.signalRepository.lidMapping.getPNForLID(lid),
       store: (pairs) => this.client.signalRepository.lidMapping.storeLIDPNMappings(pairs),
     });
+  }
+
+  private async handleLidMappingUpdate(mapping: { lid: string; pn: string }) {
+    const normalizedMapping = normalizeLidPnMapping(mapping.lid, mapping.pn);
+    if (!normalizedMapping) return;
+
+    await this.client.signalRepository.lidMapping.storeLIDPNMappings([normalizedMapping]);
+    void this.sendDataWebhook(Events.LID_MAPPING_UPDATE, {
+      instance: this.instance.name,
+      lid: normalizedMapping.lid,
+      pn: normalizedMapping.pn,
+    }).catch((error) => this.logger.error(error));
   }
 
   private readonly messageHandle = {
@@ -1936,6 +1948,10 @@ export class BaileysStartupService extends ChannelStartupService {
 
             if (events['creds.update']) {
               this.instance.authState.saveCreds();
+            }
+
+            if (events['lid-mapping.update']) {
+              await this.handleLidMappingUpdate(events['lid-mapping.update']);
             }
 
             if (events['messaging-history.set']) {

@@ -39,6 +39,10 @@ function mappingFromPair(first?: string | null, second?: string | null): LidPnMa
   return null;
 }
 
+export function normalizeLidPnMapping(lid?: string | null, pn?: string | null): LidPnMapping | null {
+  return mappingFromPair(lid, pn);
+}
+
 function uniqueMappings(pairs: LidPnMapping[]): LidPnMapping[] {
   const mappings = new Map<string, LidPnMapping>();
   for (const pair of pairs) mappings.set(`${pair.lid}:${pair.pn}`, pair);

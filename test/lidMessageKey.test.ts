@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeBaileysMessageContent, normalizeLidMessageKey } from '../src/utils/lidMessageKey';
+import { normalizeBaileysMessageContent, normalizeLidMessageKey, normalizeLidPnMapping } from '../src/utils/lidMessageKey';
 
 function mappingStore(resolutions: Record<string, string | null> = {}) {
   const stored: Array<{ lid: string; pn: string }> = [];
@@ -76,6 +76,15 @@ test('não troca dois identificadores LID nem associa um contato por aproximaç�
   assert.equal(key.remoteJid, '123456789@lid');
   assert.equal(key.remoteJidAlt, '987654321@lid');
   assert.deepEqual(store.stored, []);
+});
+
+test('aceita somente um evento de mapeamento LID para telefone real', () => {
+  assert.deepEqual(normalizeLidPnMapping('123456789@lid', '5511999999999@s.whatsapp.net'), {
+    lid: '123456789@lid',
+    pn: '5511999999999@s.whatsapp.net',
+  });
+  assert.equal(normalizeLidPnMapping('123456789@lid', '987654321@lid'), null);
+  assert.equal(normalizeLidPnMapping('5511999999999@s.whatsapp.net', '5511888888888@s.whatsapp.net'), null);
 });
 
 test('recupera o texto dentro de uma mensagem efêmera do Baileys', () => {
