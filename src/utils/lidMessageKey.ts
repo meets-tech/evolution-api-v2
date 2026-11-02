@@ -12,6 +12,12 @@ export interface LidPnMapping {
   pn: string;
 }
 
+interface LidAwareContact {
+  id?: string | null;
+  lid?: string | null;
+  phoneNumber?: string | null;
+}
+
 interface LidMappingStore {
   resolve(lid: string): Promise<string | null>;
   store(pairs: LidPnMapping[]): Promise<void>;
@@ -41,6 +47,30 @@ function mappingFromPair(first?: string | null, second?: string | null): LidPnMa
 
 export function normalizeLidPnMapping(lid?: string | null, pn?: string | null): LidPnMapping | null {
   return mappingFromPair(lid, pn);
+}
+
+export function collectLidPnMappings(
+  contacts: LidAwareContact[] = [],
+  suppliedMappings: LidPnMapping[] = [],
+): LidPnMapping[] {
+  const candidates = new Map<string, Set<string>>();
+  const add = (mapping: LidPnMapping | null) => {
+    if (!mapping) return;
+    const phones = candidates.get(mapping.lid) ?? new Set<string>();
+    phones.add(mapping.pn);
+    candidates.set(mapping.lid, phones);
+  };
+
+  for (const mapping of suppliedMappings) add(normalizeLidPnMapping(mapping.lid, mapping.pn));
+  for (const contact of contacts) {
+    add(mappingFromPair(contact.lid, contact.phoneNumber));
+    add(mappingFromPair(contact.id, contact.phoneNumber));
+    add(mappingFromPair(contact.id, contact.lid));
+  }
+
+  return [...candidates.entries()].flatMap(([lid, phones]) =>
+    phones.size === 1 ? [{ lid, pn: [...phones][0] }] : [],
+  );
 }
 
 function uniqueMappings(pairs: LidPnMapping[]): LidPnMapping[] {
