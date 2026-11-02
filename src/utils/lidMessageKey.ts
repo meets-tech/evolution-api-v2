@@ -68,9 +68,7 @@ export function collectLidPnMappings(
     add(mappingFromPair(contact.id, contact.lid));
   }
 
-  return [...candidates.entries()].flatMap(([lid, phones]) =>
-    phones.size === 1 ? [{ lid, pn: [...phones][0] }] : [],
-  );
+  return [...candidates.entries()].flatMap(([lid, phones]) => (phones.size === 1 ? [{ lid, pn: [...phones][0] }] : []));
 }
 
 function uniqueMappings(pairs: LidPnMapping[]): LidPnMapping[] {
