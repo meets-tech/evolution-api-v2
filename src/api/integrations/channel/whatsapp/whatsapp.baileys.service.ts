@@ -84,7 +84,12 @@ import { createId as cuid } from '@paralleldrive/cuid2';
 import { Instance, Message } from '@prisma/client';
 import { createJid } from '@utils/createJid';
 import { fetchLatestWaWebVersion } from '@utils/fetchLatestWaWebVersion';
-import { normalizeBaileysMessageContent, normalizeLidMessageKey, normalizeLidPnMapping } from '@utils/lidMessageKey';
+import {
+  collectLidPnMappings,
+  LidPnMapping,
+  normalizeBaileysMessageContent,
+  normalizeLidMessageKey,
+} from '@utils/lidMessageKey';
 import { makeProxyAgent, makeProxyAgentUndici } from '@utils/makeProxyAgent';
 import { getOnWhatsappCache, saveOnWhatsappCache } from '@utils/onWhatsappCache';
 import { status } from '@utils/renderStatus';
@@ -942,15 +947,22 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   private async handleLidMappingUpdate(mapping: { lid: string; pn: string }) {
-    const normalizedMapping = normalizeLidPnMapping(mapping.lid, mapping.pn);
-    if (!normalizedMapping) return;
+    await this.handleLidMappingUpdates([mapping]);
+  }
 
-    await this.client.signalRepository.lidMapping.storeLIDPNMappings([normalizedMapping]);
-    void this.sendDataWebhook(Events.LID_MAPPING_UPDATE, {
-      instance: this.instance.name,
-      lid: normalizedMapping.lid,
-      pn: normalizedMapping.pn,
-    }).catch((error) => this.logger.error(error));
+  private async handleLidMappingUpdates(mappings: LidPnMapping[]) {
+    const normalizedMappings = collectLidPnMappings([], mappings);
+    if (!normalizedMappings.length) return;
+
+    await this.client.signalRepository.lidMapping.storeLIDPNMappings(normalizedMappings);
+    for (let offset = 0; offset < normalizedMappings.length; offset += 250) {
+      const chunk = normalizedMappings.slice(offset, offset + 250);
+      const payload =
+        chunk.length === 1
+          ? { instance: this.instance.name, ...chunk[0] }
+          : { instance: this.instance.name, mappings: chunk };
+      await this.sendDataWebhook(Events.LID_MAPPING_UPDATE, payload).catch((error) => this.logger.error(error));
+    }
   }
 
   private readonly messageHandle = {
@@ -961,6 +973,7 @@ export class BaileysStartupService extends ChannelStartupService {
       isLatest,
       progress,
       syncType,
+      lidPnMappings,
     }: {
       chats: Chat[];
       contacts: Contact[];
@@ -968,6 +981,7 @@ export class BaileysStartupService extends ChannelStartupService {
       isLatest?: boolean;
       progress?: number;
       syncType?: proto.HistorySync.HistorySyncType;
+      lidPnMappings?: LidPnMapping[];
     }) => {
       try {
         if (syncType === proto.HistorySync.HistorySyncType.ON_DEMAND) {
@@ -978,6 +992,8 @@ export class BaileysStartupService extends ChannelStartupService {
         );
 
         const instance: InstanceDto = { instanceName: this.instance.name };
+
+        await this.handleLidMappingUpdates(collectLidPnMappings(contacts, lidPnMappings));
 
         let timestampLimitToImport = null;
 

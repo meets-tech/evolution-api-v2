@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeBaileysMessageContent, normalizeLidMessageKey, normalizeLidPnMapping } from '../src/utils/lidMessageKey';
+import {
+  collectLidPnMappings,
+  normalizeBaileysMessageContent,
+  normalizeLidMessageKey,
+  normalizeLidPnMapping,
+} from '../src/utils/lidMessageKey';
 
 function mappingStore(resolutions: Record<string, string | null> = {}) {
   const stored: Array<{ lid: string; pn: string }> = [];
@@ -85,6 +90,39 @@ test('aceita somente um evento de mapeamento LID para telefone real', () => {
   });
   assert.equal(normalizeLidPnMapping('123456789@lid', '987654321@lid'), null);
   assert.equal(normalizeLidPnMapping('5511999999999@s.whatsapp.net', '5511888888888@s.whatsapp.net'), null);
+});
+
+test('extrai o vínculo do contato sincronizado pela própria sessão', () => {
+  assert.deepEqual(
+    collectLidPnMappings([
+      {
+        id: '123456789@lid',
+        lid: '123456789@lid',
+        phoneNumber: '5511999999999@s.whatsapp.net',
+      },
+    ]),
+    [{ lid: '123456789@lid', pn: '5511999999999@s.whatsapp.net' }],
+  );
+});
+
+test('combina contatos e mapas do histórico sem duplicar o vínculo', () => {
+  assert.deepEqual(
+    collectLidPnMappings(
+      [{ id: '5511999999999@s.whatsapp.net', lid: '123456789@lid' }],
+      [{ lid: '123456789@lid', pn: '5511999999999@s.whatsapp.net' }],
+    ),
+    [{ lid: '123456789@lid', pn: '5511999999999@s.whatsapp.net' }],
+  );
+});
+
+test('não retorna um LID quando as evidências apontam para telefones diferentes', () => {
+  assert.deepEqual(
+    collectLidPnMappings(
+      [{ id: '123456789@lid', phoneNumber: '5511999999999@s.whatsapp.net' }],
+      [{ lid: '123456789@lid', pn: '5511888888888@s.whatsapp.net' }],
+    ),
+    [],
+  );
 });
 
 test('recupera o texto dentro de uma mensagem efêmera do Baileys', () => {
