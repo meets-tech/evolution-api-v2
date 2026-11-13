@@ -152,7 +152,7 @@ import sharp from 'sharp';
 import { PassThrough, Readable } from 'stream';
 import { v4 } from 'uuid';
 
-import { processIncomingCallAutomation } from '../../../../utils/incomingCallAutomation';
+import { incomingCallMessageId, processIncomingCallAutomation } from '../../../../utils/incomingCallAutomation';
 import { BaileysMessageProcessor } from './baileysMessage.processor';
 import { useVoiceCallsBaileys } from './voiceCalls/useVoiceCallsBaileys';
 
@@ -1896,7 +1896,11 @@ export class BaileysStartupService extends ChannelStartupService {
                         const recipient = call.from.endsWith('@lid')
                           ? ((await this.client.signalRepository.lidMapping.getPNForLID(call.from)) ?? call.from)
                           : call.from;
-                        const msg = await this.client.sendMessage(recipient, { text: settings.msgCall });
+                        const msg = await this.client.sendMessage(
+                          recipient,
+                          { text: settings.msgCall },
+                          { messageId: incomingCallMessageId(call.id) },
+                        );
                         this.client.ev.emit('messages.upsert', { messages: [msg], type: 'notify' });
                       },
                     },

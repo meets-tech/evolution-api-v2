@@ -2,9 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  incomingCallMessageId,
   IncomingCallActionCache,
   processIncomingCallAutomation,
 } from '../src/utils/incomingCallAutomation';
+
+test('gera o mesmo id de mensagem para todas as tentativas da mesma chamada', () => {
+  assert.equal(incomingCallMessageId('call-1'), incomingCallMessageId('call-1'));
+  assert.notEqual(incomingCallMessageId('call-1'), incomingCallMessageId('call-2'));
+  assert.match(incomingCallMessageId('call-1'), /^[A-F0-9]{32}$/);
+});
 
 function memoryCache(): IncomingCallActionCache {
   const values = new Map<string, unknown>();
@@ -69,6 +76,7 @@ test('repete somente a ação que falhou', async () => {
       if (rejected === 1) throw new Error('temporary failure');
     },
     sendMessage: async () => messages++,
+    retryDelaysMs: [],
   };
 
   await assert.rejects(processIncomingCallAutomation(input, cache));
@@ -76,6 +84,31 @@ test('repete somente a ação que falhou', async () => {
 
   assert.equal(rejected, 2);
   assert.equal(messages, 1);
+});
+
+test('repete a mensagem dentro do mesmo evento quando a primeira tentativa falha', async () => {
+  const cache = memoryCache();
+  let rejected = 0;
+  let messages = 0;
+
+  await processIncomingCallAutomation(
+    {
+      callId: 'call-transient-message',
+      status: 'offer',
+      rejectEnabled: true,
+      messageEnabled: true,
+      reject: async () => rejected++,
+      sendMessage: async () => {
+        messages++;
+        if (messages === 1) throw new Error('temporary send failure');
+      },
+      retryDelaysMs: [0],
+    },
+    cache,
+  );
+
+  assert.equal(rejected, 1);
+  assert.equal(messages, 2);
 });
 
 test('ignora estados que não sejam uma oferta de chamada', async () => {
