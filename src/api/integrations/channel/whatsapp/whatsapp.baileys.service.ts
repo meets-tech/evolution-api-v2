@@ -152,6 +152,7 @@ import sharp from 'sharp';
 import { PassThrough, Readable } from 'stream';
 import { v4 } from 'uuid';
 
+import { incomingCallMessageId, processIncomingCallAutomation } from '../../../../utils/incomingCallAutomation';
 import { BaileysMessageProcessor } from './baileysMessage.processor';
 import { useVoiceCallsBaileys } from './voiceCalls/useVoiceCallsBaileys';
 
@@ -248,6 +249,7 @@ export class BaileysStartupService extends ChannelStartupService {
   private authStateProvider: AuthStateProvider;
   private readonly msgRetryCounterCache: CacheStore = new NodeCache();
   private readonly userDevicesCache: CacheStore = new NodeCache({ stdTTL: 300000, useClones: false });
+  private readonly incomingCallActionCache = new NodeCache({ stdTTL: 86400, useClones: false });
   private endSession = false;
   private logBaileys = this.configService.get<Log>('LOG').BAILEYS;
   private eventProcessingQueue: Promise<void> = Promise.resolve();
@@ -1881,22 +1883,33 @@ export class BaileysStartupService extends ChannelStartupService {
             const settings = await this.findSettings();
 
             if (events.call) {
-              const call = events.call[0];
-
-              if (settings?.rejectCall && call.status == 'offer') {
-                this.client.rejectCall(call.id, call.from);
-              }
-
-              if (settings?.msgCall?.trim().length > 0 && call.status == 'offer') {
-                if (call.from.endsWith('@lid')) {
-                  call.from = await this.client.signalRepository.lidMapping.getPNForLID(call.from as string);
+              for (const call of events.call) {
+                try {
+                  await processIncomingCallAutomation(
+                    {
+                      callId: call.id,
+                      status: call.status,
+                      rejectEnabled: settings?.rejectCall === true,
+                      messageEnabled: Boolean(settings?.msgCall?.trim()),
+                      reject: () => this.client.rejectCall(call.id, call.from),
+                      sendMessage: async () => {
+                        const recipient = call.from.endsWith('@lid')
+                          ? ((await this.client.signalRepository.lidMapping.getPNForLID(call.from)) ?? call.from)
+                          : call.from;
+                        const msg = await this.client.sendMessage(
+                          recipient,
+                          { text: settings.msgCall },
+                          { messageId: incomingCallMessageId(call.id) },
+                        );
+                        this.client.ev.emit('messages.upsert', { messages: [msg], type: 'notify' });
+                      },
+                    },
+                    this.incomingCallActionCache,
+                  );
+                } finally {
+                  this.sendDataWebhook(Events.CALL, call);
                 }
-                const msg = await this.client.sendMessage(call.from, { text: settings.msgCall });
-
-                this.client.ev.emit('messages.upsert', { messages: [msg], type: 'notify' });
               }
-
-              this.sendDataWebhook(Events.CALL, call);
             }
 
             if (events['connection.update']) {
