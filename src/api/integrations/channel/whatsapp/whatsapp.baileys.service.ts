@@ -82,7 +82,7 @@ import { createId as cuid } from '@paralleldrive/cuid2';
 import { Instance, Message } from '@prisma/client';
 import { createJid } from '@utils/createJid';
 import { fetchLatestWaWebVersion } from '@utils/fetchLatestWaWebVersion';
-import { historySyncBrowser, historyTimestampMs } from '@utils/historySync';
+import { historySyncBrowser, historyTimestampMs, unpersistedHistoryMessages } from '@utils/historySync';
 import { makeProxyAgent, makeProxyAgentUndici } from '@utils/makeProxyAgent';
 import { getOnWhatsappCache, saveOnWhatsappCache } from '@utils/onWhatsappCache';
 import { status } from '@utils/renderStatus';
@@ -940,9 +940,6 @@ export class BaileysStartupService extends ChannelStartupService {
       syncType?: proto.HistorySync.HistorySyncType;
     }) => {
       try {
-        if (syncType === proto.HistorySync.HistorySyncType.ON_DEMAND) {
-          console.log('received on-demand history sync, messages=', messages);
-        }
         console.log(
           `recv ${chats.length} chats, ${contacts.length} contacts, ${messages.length} msgs (is latest: ${isLatest}, progress: ${progress}%), type: ${syncType}`,
         );
@@ -997,21 +994,24 @@ export class BaileysStartupService extends ChannelStartupService {
 
         const messagesRaw: any[] = [];
 
-        const messagesRepository: Set<string> = new Set(
-          chatwootImport.getRepositoryMessagesCache(instance) ??
-            (
-              await this.prismaRepository.message.findMany({
-                select: { key: true },
-                where: { instanceId: this.instanceId },
-              })
-            ).map((message) => {
-              const key = message.key as { id: string };
+        const onDemand = syncType === proto.HistorySync.HistorySyncType.ON_DEMAND;
+        const messagesRepository: Set<string> = onDemand
+          ? null
+          : new Set(
+              chatwootImport.getRepositoryMessagesCache(instance) ??
+                (
+                  await this.prismaRepository.message.findMany({
+                    select: { key: true },
+                    where: { instanceId: this.instanceId },
+                  })
+                ).map((message) => {
+                  const key = message.key as { id: string };
 
-              return key.id;
-            }),
-        );
+                  return key.id;
+                }),
+            );
 
-        if (chatwootImport.getRepositoryMessagesCache(instance) === null) {
+        if (!onDemand && chatwootImport.getRepositoryMessagesCache(instance) === null) {
           chatwootImport.setRepositoryMessagesCache(instance, messagesRepository);
         }
 
@@ -1030,7 +1030,7 @@ export class BaileysStartupService extends ChannelStartupService {
             }
           }
 
-          if (syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND && messagesRepository?.has(m.key.id)) {
+          if (messagesRepository?.has(m.key.id)) {
             continue;
           }
 
@@ -1052,7 +1052,22 @@ export class BaileysStartupService extends ChannelStartupService {
         });
 
         if (this.configService.get<Database>('DATABASE').SAVE_DATA.HISTORIC) {
-          await this.prismaRepository.message.createMany({ data: messagesRaw, skipDuplicates: true });
+          let rows = messagesRaw;
+          if (onDemand && rows.length) {
+            const existing = await this.prismaRepository.message.findMany({
+              select: { key: true },
+              where: {
+                instanceId: this.instanceId,
+                messageTimestamp: { in: [...new Set<number>(rows.map((row) => row.messageTimestamp))] },
+              },
+            });
+            rows = unpersistedHistoryMessages(
+              this.instanceId,
+              rows,
+              existing.map((row) => row.key as WAMessageKey),
+            );
+          }
+          if (rows.length) await this.prismaRepository.message.createMany({ data: rows, skipDuplicates: true });
         }
 
         if (
