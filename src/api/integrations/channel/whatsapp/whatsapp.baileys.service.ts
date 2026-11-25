@@ -732,7 +732,6 @@ export class BaileysStartupService extends ChannelStartupService {
   public async connectToWhatsapp(number?: string): Promise<WASocket> {
     try {
       this.loadChatwoot();
-      this.loadSettings();
       this.loadWebhook();
       this.loadProxy();
 
@@ -741,6 +740,7 @@ export class BaileysStartupService extends ChannelStartupService {
         onMessageReceive: this.messageHandle['messages.upsert'].bind(this),
       });
 
+      await this.loadSettings();
       return await this.createClient(number);
     } catch (error) {
       this.logger.error(error);
