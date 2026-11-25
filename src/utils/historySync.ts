@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { Browsers, WABrowserDescription } from 'baileys';
+import { Browsers, isLidUser, isPnUser, proto, WABrowserDescription } from 'baileys';
 
 export function historySyncBrowser(syncFullHistory: boolean, configured: WABrowserDescription): WABrowserDescription {
   return syncFullHistory ? Browsers.macOS('Desktop') : configured;
@@ -9,6 +9,27 @@ export function historySyncBrowser(syncFullHistory: boolean, configured: WABrows
 // WhatsApp messages carry Unix seconds. Baileys forwards this argument unchanged to oldestMsgTimestampMs.
 export function historyTimestampMs(timestamp: number): number {
   return Math.floor(timestamp < 100_000_000_000 ? timestamp * 1000 : timestamp);
+}
+
+export type HistoryCursorKey = proto.IMessageKey & {
+  addressingMode?: string;
+  remoteJidAlt?: string;
+  historyRemoteJid?: string;
+};
+
+export function historyCursorKey(key: HistoryCursorKey, cachedKey?: HistoryCursorKey): proto.IMessageKey {
+  const source = cachedKey ?? key;
+  const matchesAddressingMode =
+    source.addressingMode === 'lid' ? isLidUser : source.addressingMode === 'pn' ? isPnUser : undefined;
+  const addressedJid =
+    matchesAddressingMode && [source.remoteJid, source.remoteJidAlt].find((jid) => jid && matchesAddressingMode(jid));
+  // Legacy history keys had no addressing mode. The normalizer kept the LID
+  // as an alternative when it replaced the original LID with a phone number.
+  const legacyLid = !source.addressingMode
+    ? [source.remoteJid, source.remoteJidAlt].find((jid) => jid && isLidUser(jid))
+    : undefined;
+  const remoteJid = source.historyRemoteJid ?? addressedJid ?? legacyLid ?? key.remoteJid;
+  return { ...key, remoteJid };
 }
 
 type HistoryKey = {

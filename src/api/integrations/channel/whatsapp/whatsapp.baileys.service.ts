@@ -84,7 +84,13 @@ import { createId as cuid } from '@paralleldrive/cuid2';
 import { Instance, Message } from '@prisma/client';
 import { createJid } from '@utils/createJid';
 import { fetchLatestWaWebVersion } from '@utils/fetchLatestWaWebVersion';
-import { historySyncBrowser, historyTimestampMs, unpersistedHistoryMessages } from '@utils/historySync';
+import {
+  HistoryCursorKey,
+  historyCursorKey,
+  historySyncBrowser,
+  historyTimestampMs,
+  unpersistedHistoryMessages,
+} from '@utils/historySync';
 import {
   collectLidPnMappings,
   LidPnMapping,
@@ -939,11 +945,16 @@ export class BaileysStartupService extends ChannelStartupService {
     },
   };
 
-  private async normalizeMessageKey<T extends ExtendedIMessageKey>(key: T): Promise<T> {
-    return normalizeLidMessageKey(key, {
+  private async normalizeMessageKey<T extends ExtendedIMessageKey>(key: T): Promise<T & HistoryCursorKey> {
+    const normalized: T & HistoryCursorKey = await normalizeLidMessageKey(key, {
       resolve: (lid) => this.client.signalRepository.lidMapping.getPNForLID(lid),
       store: (pairs) => this.client.signalRepository.lidMapping.storeLIDPNMappings(pairs),
     });
+    // Baileys needs the original chat address when requesting older messages.
+    if (key.id && key.remoteJid && key.remoteJid !== normalized.remoteJid && !normalized.historyRemoteJid) {
+      normalized.historyRemoteJid = key.remoteJid;
+    }
+    return normalized;
   }
 
   private async handleLidMappingUpdate(mapping: { lid: string; pn: string }) {
@@ -1075,7 +1086,7 @@ export class BaileysStartupService extends ChannelStartupService {
             continue;
           }
 
-          Object.assign(m.key, await this.normalizeMessageKey(m.key));
+          m.key = await this.normalizeMessageKey(m.key);
           m.message = normalizeBaileysMessageContent(m.message);
 
           if (Long.isLong(m?.messageTimestamp)) {
@@ -5240,7 +5251,7 @@ export class BaileysStartupService extends ChannelStartupService {
     };
   }
 
-  public async fetchMessageHistory(data: { count?: number; key: proto.IMessageKey; messageTimestamp: number }) {
+  public async fetchMessageHistory(data: { count?: number; key: HistoryCursorKey; messageTimestamp: number }) {
     if (!this.client) {
       throw new BadRequestException('WhatsApp connection is not available');
     }
@@ -5249,13 +5260,36 @@ export class BaileysStartupService extends ChannelStartupService {
     if (!Number.isFinite(suppliedTimestamp) || suppliedTimestamp <= 0) {
       throw new BadRequestException('messageTimestamp is required to fetch message history');
     }
-    const requestId = await this.client.fetchMessageHistory(count, data.key, historyTimestampMs(suppliedTimestamp));
+    const timestampMs = historyTimestampMs(suppliedTimestamp);
+    const cached =
+      !data.key.historyRemoteJid && data.key.id && data.key.remoteJid
+        ? await this.prismaRepository.message
+            .findFirst({
+              where: {
+                instanceId: this.instanceId,
+                messageTimestamp: Math.floor(timestampMs / 1000),
+                AND: [
+                  { key: { path: ['id'], equals: data.key.id } },
+                  {
+                    OR: [
+                      { key: { path: ['remoteJid'], equals: data.key.remoteJid } },
+                      { key: { path: ['remoteJidAlt'], equals: data.key.remoteJid } },
+                    ],
+                  },
+                ],
+              },
+              select: { key: true },
+            })
+            .catch(() => null)
+        : null;
+    const key = historyCursorKey(data.key, cached?.key as HistoryCursorKey | undefined);
+    const requestId = await this.client.fetchMessageHistory(count, key, timestampMs);
 
     return {
       status: 'requested',
       requestId,
       count,
-      remoteJid: data.key.remoteJid,
+      remoteJid: key.remoteJid,
     };
   }
 }
