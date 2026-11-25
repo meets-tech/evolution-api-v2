@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { Browsers, proto, WABrowserDescription } from 'baileys';
+import { Browsers, isLidUser, isPnUser, proto, WABrowserDescription } from 'baileys';
 
 export function historySyncBrowser(syncFullHistory: boolean, configured: WABrowserDescription): WABrowserDescription {
   return syncFullHistory ? Browsers.macOS('Desktop') : configured;
@@ -11,10 +11,21 @@ export function historyTimestampMs(timestamp: number): number {
   return Math.floor(timestamp < 100_000_000_000 ? timestamp * 1000 : timestamp);
 }
 
-export type HistoryCursorKey = proto.IMessageKey & { historyRemoteJid?: string };
+export type HistoryCursorKey = proto.IMessageKey & {
+  addressingMode?: string;
+  remoteJidAlt?: string;
+  historyRemoteJid?: string;
+};
 
-export function historyCursorKey(key: HistoryCursorKey): proto.IMessageKey {
-  return key.historyRemoteJid ? { ...key, remoteJid: key.historyRemoteJid } : key;
+export function historyCursorKey(key: HistoryCursorKey, cachedKey?: HistoryCursorKey): proto.IMessageKey {
+  const source = cachedKey ?? key;
+  const matchesAddressingMode =
+    source.addressingMode === 'lid' ? isLidUser : source.addressingMode === 'pn' ? isPnUser : undefined;
+  const addressedJid =
+    matchesAddressingMode && [source.remoteJid, source.remoteJidAlt].find((jid) => jid && matchesAddressingMode(jid));
+  const storedLid = cachedKey?.remoteJid && isLidUser(cachedKey.remoteJid) ? cachedKey.remoteJid : undefined;
+  const remoteJid = source.historyRemoteJid ?? addressedJid ?? storedLid ?? key.remoteJid;
+  return { ...key, remoteJid };
 }
 
 type HistoryKey = {

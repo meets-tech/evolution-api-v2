@@ -945,11 +945,16 @@ export class BaileysStartupService extends ChannelStartupService {
     },
   };
 
-  private async normalizeMessageKey<T extends ExtendedIMessageKey>(key: T): Promise<T> {
-    return normalizeLidMessageKey(key, {
+  private async normalizeMessageKey<T extends ExtendedIMessageKey>(key: T): Promise<T & HistoryCursorKey> {
+    const normalized: T & HistoryCursorKey = await normalizeLidMessageKey(key, {
       resolve: (lid) => this.client.signalRepository.lidMapping.getPNForLID(lid),
       store: (pairs) => this.client.signalRepository.lidMapping.storeLIDPNMappings(pairs),
     });
+    // Baileys needs the original chat address when requesting older messages.
+    if (key.id && key.remoteJid && key.remoteJid !== normalized.remoteJid && !normalized.historyRemoteJid) {
+      normalized.historyRemoteJid = key.remoteJid;
+    }
+    return normalized;
   }
 
   private async handleLidMappingUpdate(mapping: { lid: string; pn: string }) {
@@ -1081,13 +1086,7 @@ export class BaileysStartupService extends ChannelStartupService {
             continue;
           }
 
-          const historyRemoteJid = m.key.remoteJid;
-          const normalizedKey: HistoryCursorKey = await this.normalizeMessageKey(m.key);
-          // Baileys uses the original WhatsApp chat address to request older messages.
-          if (historyRemoteJid && historyRemoteJid !== normalizedKey.remoteJid) {
-            normalizedKey.historyRemoteJid = historyRemoteJid;
-          }
-          m.key = normalizedKey;
+          m.key = await this.normalizeMessageKey(m.key);
           m.message = normalizeBaileysMessageContent(m.message);
 
           if (Long.isLong(m?.messageTimestamp)) {
@@ -5261,8 +5260,30 @@ export class BaileysStartupService extends ChannelStartupService {
     if (!Number.isFinite(suppliedTimestamp) || suppliedTimestamp <= 0) {
       throw new BadRequestException('messageTimestamp is required to fetch message history');
     }
-    const key = historyCursorKey(data.key);
-    const requestId = await this.client.fetchMessageHistory(count, key, historyTimestampMs(suppliedTimestamp));
+    const timestampMs = historyTimestampMs(suppliedTimestamp);
+    const cached =
+      !data.key.historyRemoteJid && data.key.id && data.key.remoteJid
+        ? await this.prismaRepository.message
+            .findFirst({
+              where: {
+                instanceId: this.instanceId,
+                messageTimestamp: Math.floor(timestampMs / 1000),
+                AND: [
+                  { key: { path: ['id'], equals: data.key.id } },
+                  {
+                    OR: [
+                      { key: { path: ['remoteJid'], equals: data.key.remoteJid } },
+                      { key: { path: ['remoteJidAlt'], equals: data.key.remoteJid } },
+                    ],
+                  },
+                ],
+              },
+              select: { key: true },
+            })
+            .catch(() => null)
+        : null;
+    const key = historyCursorKey(data.key, cached?.key as HistoryCursorKey | undefined);
+    const requestId = await this.client.fetchMessageHistory(count, key, timestampMs);
 
     return {
       status: 'requested',
