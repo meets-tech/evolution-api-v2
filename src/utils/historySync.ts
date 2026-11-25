@@ -23,8 +23,12 @@ export function historyCursorKey(key: HistoryCursorKey, cachedKey?: HistoryCurso
     source.addressingMode === 'lid' ? isLidUser : source.addressingMode === 'pn' ? isPnUser : undefined;
   const addressedJid =
     matchesAddressingMode && [source.remoteJid, source.remoteJidAlt].find((jid) => jid && matchesAddressingMode(jid));
-  const storedLid = cachedKey?.remoteJid && isLidUser(cachedKey.remoteJid) ? cachedKey.remoteJid : undefined;
-  const remoteJid = source.historyRemoteJid ?? addressedJid ?? storedLid ?? key.remoteJid;
+  // Legacy history keys had no addressing mode. The normalizer kept the LID
+  // as an alternative when it replaced the original LID with a phone number.
+  const legacyLid = !source.addressingMode
+    ? [source.remoteJid, source.remoteJidAlt].find((jid) => jid && isLidUser(jid))
+    : undefined;
+  const remoteJid = source.historyRemoteJid ?? addressedJid ?? legacyLid ?? key.remoteJid;
   return { ...key, remoteJid };
 }
 

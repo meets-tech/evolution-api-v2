@@ -30,7 +30,8 @@ test('a restored instance waits for its history preference before creating the s
   assert.deepEqual(socketPreferences, [true]);
 });
 
-test('fetches the first page using a legacy cached WhatsApp LID', async () => {
+for (const addressingMode of [undefined, 'lid']) {
+test(`fetches the first page using a legacy cached WhatsApp LID (mode: ${addressingMode})`, async () => {
   const service = Object.create(BaileysStartupService.prototype);
   const phone = '10@s.whatsapp.net';
   const lid = '20@lid';
@@ -52,7 +53,7 @@ test('fetches the first page using a legacy cached WhatsApp LID', async () => {
               ] },
             ],
           });
-          return { key: { ...key, remoteJidAlt: lid, addressingMode: 'lid' } };
+          return { key: { ...key, remoteJidAlt: lid, addressingMode } };
         },
       },
     },
@@ -73,6 +74,7 @@ test('fetches the first page using a legacy cached WhatsApp LID', async () => {
     remoteJid: lid,
   });
 });
+}
 
 test('preserves the original LID when normalizing an incoming message key', async () => {
   const service = Object.create(BaileysStartupService.prototype);
