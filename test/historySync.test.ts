@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { Browsers, generateLoginNode, proto, WABrowserDescription } from 'baileys';
+
+import { historySyncBrowser, historyTimestampMs } from '../src/utils/historySync';
+
+test('full-history QR login advertises a desktop companion to WhatsApp', () => {
+  const configured: WABrowserDescription = ['Evolution API', 'Chrome', '1'];
+  const browser = historySyncBrowser(true, configured);
+  const login = generateLoginNode('123:1@s.whatsapp.net', { browser, syncFullHistory: true, version: [2, 3000, 1] } as never);
+  assert.deepEqual(browser, Browsers.macOS('Desktop'));
+  assert.equal(login.webInfo.webSubPlatform, proto.ClientPayload.WebInfo.WebSubPlatform.DARWIN);
+  assert.deepEqual(historySyncBrowser(false, configured), configured);
+});
+
+test('on-demand cursors keep the message date in the millisecond field accepted by Baileys', () => {
+  const milliseconds = Date.parse('2026-11-25T12:00:00Z');
+  for (const timestamp of [milliseconds / 1000, milliseconds, milliseconds + 123]) {
+    const expected = timestamp < milliseconds ? milliseconds : timestamp;
+    assert.equal(historyTimestampMs(timestamp), expected);
+  }
+});
