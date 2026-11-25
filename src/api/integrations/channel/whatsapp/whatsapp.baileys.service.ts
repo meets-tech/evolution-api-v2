@@ -84,6 +84,7 @@ import { createId as cuid } from '@paralleldrive/cuid2';
 import { Instance, Message } from '@prisma/client';
 import { createJid } from '@utils/createJid';
 import { fetchLatestWaWebVersion } from '@utils/fetchLatestWaWebVersion';
+import { historySyncBrowser, historyTimestampMs, unpersistedHistoryMessages } from '@utils/historySync';
 import {
   collectLidPnMappings,
   LidPnMapping,
@@ -133,7 +134,6 @@ import makeWASocket, {
   Product,
   proto,
   UserFacingSocketConfig,
-  WABrowserDescription,
   WAMediaUpload,
   WAMessage,
   WAMessageKey,
@@ -594,7 +594,7 @@ export class BaileysStartupService extends ChannelStartupService {
 
       this.logger.info(`Phone number: ${number}`);
     } else {
-      const browser: WABrowserDescription = [session.CLIENT, session.NAME, release()];
+      const browser = historySyncBrowser(this.localSettings.syncFullHistory, [session.CLIENT, session.NAME, release()]);
       browserOptions = { browser };
 
       this.logger.info(`Browser: ${browser}`);
@@ -732,7 +732,6 @@ export class BaileysStartupService extends ChannelStartupService {
   public async connectToWhatsapp(number?: string): Promise<WASocket> {
     try {
       this.loadChatwoot();
-      this.loadSettings();
       this.loadWebhook();
       this.loadProxy();
 
@@ -741,6 +740,7 @@ export class BaileysStartupService extends ChannelStartupService {
         onMessageReceive: this.messageHandle['messages.upsert'].bind(this),
       });
 
+      await this.loadSettings();
       return await this.createClient(number);
     } catch (error) {
       this.logger.error(error);
@@ -984,9 +984,6 @@ export class BaileysStartupService extends ChannelStartupService {
       lidPnMappings?: LidPnMapping[];
     }) => {
       try {
-        if (syncType === proto.HistorySync.HistorySyncType.ON_DEMAND) {
-          console.log('received on-demand history sync, messages=', messages);
-        }
         console.log(
           `recv ${chats.length} chats, ${contacts.length} contacts, ${messages.length} msgs (is latest: ${isLatest}, progress: ${progress}%), type: ${syncType}`,
         );
@@ -1052,21 +1049,24 @@ export class BaileysStartupService extends ChannelStartupService {
 
         const messagesRaw: any[] = [];
 
-        const messagesRepository: Set<string> = new Set(
-          chatwootImport.getRepositoryMessagesCache(instance) ??
-            (
-              await this.prismaRepository.message.findMany({
-                select: { key: true },
-                where: { instanceId: this.instanceId },
-              })
-            ).map((message) => {
-              const key = message.key as { id: string };
+        const onDemand = syncType === proto.HistorySync.HistorySyncType.ON_DEMAND;
+        const messagesRepository: Set<string> = onDemand
+          ? null
+          : new Set(
+              chatwootImport.getRepositoryMessagesCache(instance) ??
+                (
+                  await this.prismaRepository.message.findMany({
+                    select: { key: true },
+                    where: { instanceId: this.instanceId },
+                  })
+                ).map((message) => {
+                  const key = message.key as { id: string };
 
-              return key.id;
-            }),
-        );
+                  return key.id;
+                }),
+            );
 
-        if (chatwootImport.getRepositoryMessagesCache(instance) === null) {
+        if (!onDemand && chatwootImport.getRepositoryMessagesCache(instance) === null) {
           chatwootImport.setRepositoryMessagesCache(instance, messagesRepository);
         }
 
@@ -1088,7 +1088,7 @@ export class BaileysStartupService extends ChannelStartupService {
             }
           }
 
-          if (syncType !== proto.HistorySync.HistorySyncType.ON_DEMAND && messagesRepository?.has(m.key.id)) {
+          if (messagesRepository?.has(m.key.id)) {
             continue;
           }
 
@@ -1110,7 +1110,22 @@ export class BaileysStartupService extends ChannelStartupService {
         });
 
         if (this.configService.get<Database>('DATABASE').SAVE_DATA.HISTORIC) {
-          await this.prismaRepository.message.createMany({ data: messagesRaw, skipDuplicates: true });
+          let rows = messagesRaw;
+          if (onDemand && rows.length) {
+            const existing = await this.prismaRepository.message.findMany({
+              select: { key: true },
+              where: {
+                instanceId: this.instanceId,
+                messageTimestamp: { in: [...new Set<number>(rows.map((row) => row.messageTimestamp))] },
+              },
+            });
+            rows = unpersistedHistoryMessages(
+              this.instanceId,
+              rows,
+              existing.map((row) => row.key as WAMessageKey),
+            );
+          }
+          if (rows.length) await this.prismaRepository.message.createMany({ data: rows, skipDuplicates: true });
         }
 
         if (
@@ -1175,7 +1190,11 @@ export class BaileysStartupService extends ChannelStartupService {
             }
 
             if (text == 'onDemandHistSync') {
-              const messageId = await this.client.fetchMessageHistory(50, received.key, received.messageTimestamp!);
+              const messageId = await this.client.fetchMessageHistory(
+                50,
+                received.key,
+                historyTimestampMs(Number(received.messageTimestamp)),
+              );
               console.log('requested on-demand sync, id=', messageId);
             }
           }
@@ -5227,12 +5246,10 @@ export class BaileysStartupService extends ChannelStartupService {
     }
     const count = Math.min(Math.max(Number(data.count) || 50, 1), 100);
     const suppliedTimestamp = Number(data.messageTimestamp);
-    if (!Number.isFinite(suppliedTimestamp)) {
+    if (!Number.isFinite(suppliedTimestamp) || suppliedTimestamp <= 0) {
       throw new BadRequestException('messageTimestamp is required to fetch message history');
     }
-    const messageTimestamp =
-      suppliedTimestamp >= 100_000_000_000 ? Math.floor(suppliedTimestamp / 1_000) : Math.floor(suppliedTimestamp);
-    const requestId = await this.client.fetchMessageHistory(count, data.key, Math.floor(messageTimestamp));
+    const requestId = await this.client.fetchMessageHistory(count, data.key, historyTimestampMs(suppliedTimestamp));
 
     return {
       status: 'requested',
