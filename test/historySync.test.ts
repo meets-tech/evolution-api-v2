@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { Browsers, generateLoginNode, proto, WABrowserDescription } from 'baileys';
 
-import { historySyncBrowser, historyTimestampMs, unpersistedHistoryMessages } from '../src/utils/historySync';
+import { historyCursorKey, historySyncBrowser, historyTimestampMs, unpersistedHistoryMessages } from '../src/utils/historySync';
 
 test('full-history QR login advertises a desktop companion to WhatsApp', () => {
   const configured: WABrowserDescription = ['Evolution API', 'Chrome', '1'];
@@ -20,6 +20,16 @@ test('on-demand cursors keep the message date in the millisecond field accepted 
     const expected = timestamp < milliseconds ? milliseconds : timestamp;
     assert.equal(historyTimestampMs(timestamp), expected);
   }
+});
+
+test('on-demand cursors retain the original chat address after phone number normalization', () => {
+  const key = { id: 'first', remoteJid: '10@s.whatsapp.net', fromMe: false };
+  assert.deepEqual(historyCursorKey(key), key);
+  assert.deepEqual(historyCursorKey({ ...key, historyRemoteJid: '20@lid' }), {
+    ...key,
+    remoteJid: '20@lid',
+    historyRemoteJid: '20@lid',
+  });
 });
 
 

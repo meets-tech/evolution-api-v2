@@ -284,6 +284,7 @@ export const fetchMessageHistorySchema: JSONSchema7 = {
       properties: {
         id: { type: 'string', minLength: 1 },
         remoteJid: { type: 'string', minLength: 1 },
+        historyRemoteJid: { type: 'string', minLength: 1 },
         fromMe: { type: 'boolean' },
         participant: { type: 'string' },
       },

@@ -1,9 +1,10 @@
 replicaCount: 1
 
 image:
-  repository: evoapicloud/evolution-api
+  repository: sa-saopaulo-1.ocir.io/gr6emtyps1q4/evolution-api-v2
   tag: dev
   pullPolicy: Always
+  pullSecret: ''
 
 service:
   port: 8080

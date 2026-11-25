@@ -24,7 +24,7 @@ export class getBase64FromMediaMessageDto {
 
 export class FetchMessageHistoryDto {
   count?: number;
-  key: proto.IMessageKey;
+  key: proto.IMessageKey & { historyRemoteJid?: string };
   messageTimestamp: number;
 }
 
