@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { Browsers, WABrowserDescription } from 'baileys';
+import { Browsers, proto, WABrowserDescription } from 'baileys';
 
 export function historySyncBrowser(syncFullHistory: boolean, configured: WABrowserDescription): WABrowserDescription {
   return syncFullHistory ? Browsers.macOS('Desktop') : configured;
@@ -9,6 +9,12 @@ export function historySyncBrowser(syncFullHistory: boolean, configured: WABrows
 // WhatsApp messages carry Unix seconds. Baileys forwards this argument unchanged to oldestMsgTimestampMs.
 export function historyTimestampMs(timestamp: number): number {
   return Math.floor(timestamp < 100_000_000_000 ? timestamp * 1000 : timestamp);
+}
+
+export type HistoryCursorKey = proto.IMessageKey & { historyRemoteJid?: string };
+
+export function historyCursorKey(key: HistoryCursorKey): proto.IMessageKey {
+  return key.historyRemoteJid ? { ...key, remoteJid: key.historyRemoteJid } : key;
 }
 
 type HistoryKey = {

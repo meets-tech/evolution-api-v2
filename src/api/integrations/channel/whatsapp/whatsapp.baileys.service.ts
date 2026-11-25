@@ -82,7 +82,13 @@ import { createId as cuid } from '@paralleldrive/cuid2';
 import { Instance, Message } from '@prisma/client';
 import { createJid } from '@utils/createJid';
 import { fetchLatestWaWebVersion } from '@utils/fetchLatestWaWebVersion';
-import { historySyncBrowser, historyTimestampMs, unpersistedHistoryMessages } from '@utils/historySync';
+import {
+  HistoryCursorKey,
+  historyCursorKey,
+  historySyncBrowser,
+  historyTimestampMs,
+  unpersistedHistoryMessages,
+} from '@utils/historySync';
 import { makeProxyAgent, makeProxyAgentUndici } from '@utils/makeProxyAgent';
 import { getOnWhatsappCache, saveOnWhatsappCache } from '@utils/onWhatsappCache';
 import { status } from '@utils/renderStatus';
@@ -5139,7 +5145,7 @@ export class BaileysStartupService extends ChannelStartupService {
     };
   }
 
-  public async fetchMessageHistory(data: { count?: number; key: proto.IMessageKey; messageTimestamp: number }) {
+  public async fetchMessageHistory(data: { count?: number; key: HistoryCursorKey; messageTimestamp: number }) {
     if (!this.client) {
       throw new BadRequestException('WhatsApp connection is not available');
     }
@@ -5148,13 +5154,14 @@ export class BaileysStartupService extends ChannelStartupService {
     if (!Number.isFinite(suppliedTimestamp) || suppliedTimestamp <= 0) {
       throw new BadRequestException('messageTimestamp is required to fetch message history');
     }
-    const requestId = await this.client.fetchMessageHistory(count, data.key, historyTimestampMs(suppliedTimestamp));
+    const key = historyCursorKey(data.key);
+    const requestId = await this.client.fetchMessageHistory(count, key, historyTimestampMs(suppliedTimestamp));
 
     return {
       status: 'requested',
       requestId,
       count,
-      remoteJid: data.key.remoteJid,
+      remoteJid: key.remoteJid,
     };
   }
 }

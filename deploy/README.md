@@ -30,6 +30,13 @@ example `postgresql://<user>:<password>@<host>:5432/evolution_dev`.
 
 ## Deploy
 
+Publish the environment image with the **Build Docker image** workflow. The chart
+uses the same OCIR repository and environment tag as that workflow. If the
+namespace service account does not already authenticate to OCIR, set
+`image.pullSecret` to the existing registry Secret for the release.
+If the Helm upgrade leaves the pod template unchanged, restart the Deployment
+to pull the new image. Verify the running digest against the workflow output.
+
 ```bash
 helm upgrade --install evolution-api-dev chart/ \
   --namespace dev \
