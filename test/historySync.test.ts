@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { Browsers, generateLoginNode, proto, WABrowserDescription } from 'baileys';
 
-import { historySyncBrowser, historyTimestampMs } from '../src/utils/historySync';
+import { historySyncBrowser, historyTimestampMs, unpersistedHistoryMessages } from '../src/utils/historySync';
 
 test('full-history QR login advertises a desktop companion to WhatsApp', () => {
   const configured: WABrowserDescription = ['Evolution API', 'Chrome', '1'];
@@ -20,4 +20,18 @@ test('on-demand cursors keep the message date in the millisecond field accepted 
     const expected = timestamp < milliseconds ? milliseconds : timestamp;
     assert.equal(historyTimestampMs(timestamp), expected);
   }
+});
+
+
+test('overlapping history pages keep all webhook records and only insert new WhatsApp keys', () => {
+  const key = { id: 'first', remoteJid: '10@s.whatsapp.net', remoteJidAlt: '20@lid', fromMe: false };
+  const next = { key: { ...key, id: 'next' } };
+  const page = [{ key }, next, next];
+  const stored = [{ ...key, remoteJid: '20@lid', remoteJidAlt: undefined }];
+  const pending = unpersistedHistoryMessages('line', page, stored);
+  assert.deepEqual(pending.map((row) => row.key.id), ['next']);
+  assert.equal(page.length, 3);
+  assert.deepEqual(unpersistedHistoryMessages('line', [next], []), pending);
+  assert.notEqual(unpersistedHistoryMessages('another-line', [next], [])[0].id, pending[0].id);
+  assert.deepEqual(unpersistedHistoryMessages('line', page, [...stored, next.key]), []);
 });
