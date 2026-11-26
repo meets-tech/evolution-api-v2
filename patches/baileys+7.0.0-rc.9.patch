@@ -1,13 +1,10 @@
-diff --git a/node_modules/baileys/lib/Socket/messages-recv.js b/node_modules/baileys/lib/Socket/messages-recv.js
-index f2e2e10..b9d82c2 100644
 --- a/node_modules/baileys/lib/Socket/messages-recv.js
 +++ b/node_modules/baileys/lib/Socket/messages-recv.js
-@@ -911,6 +911,15 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -911,6 +911,14 @@
              await sendMessageAck(node);
          }
      };
 +    const handleStatus = async (node) => {
-+        // The offline queue loop has no catch: a throw here would stall it for this socket
 +        try {
 +            await sendMessageAck(node);
 +        }
@@ -18,7 +15,7 @@ index f2e2e10..b9d82c2 100644
      const handleNotification = async (node) => {
          const remoteJid = node.attrs.from;
          if (shouldIgnoreJid(remoteJid) && remoteJid !== S_WHATSAPP_NET) {
-@@ -1171,7 +1180,8 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -1171,7 +1179,8 @@
              ['message', handleMessage],
              ['call', handleCall],
              ['receipt', handleReceipt],
@@ -28,7 +25,7 @@ index f2e2e10..b9d82c2 100644
          ]);
          const nodes = [];
          let isProcessing = false;
-@@ -1220,6 +1230,9 @@ export const makeMessagesRecvSocket = (config) => {
+@@ -1220,6 +1229,9 @@
      ws.on('CB:notification', async (node) => {
          await processNode('notification', node, 'handling notification', handleNotification);
      });
