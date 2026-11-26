@@ -99,6 +99,7 @@ import {
 } from '@utils/lidMessageKey';
 import { makeProxyAgent, makeProxyAgentUndici } from '@utils/makeProxyAgent';
 import { getOnWhatsappCache, saveOnWhatsappCache } from '@utils/onWhatsappCache';
+import { MAX_RECONNECT_ATTEMPTS, reconnectDelayMs, shouldReconnect } from '@utils/reconnectPolicy';
 import { status } from '@utils/renderStatus';
 import { resolveLidBatch } from '@utils/resolveLidBatch';
 import { sendTelemetry } from '@utils/sendTelemetry';
@@ -264,6 +265,8 @@ export class BaileysStartupService extends ChannelStartupService {
   private readonly msgRetryCounterCache: CacheStore = new NodeCache();
   private readonly userDevicesCache: CacheStore = new NodeCache({ stdTTL: 300000, useClones: false });
   private endSession = false;
+  private reconnectAttempts = 0;
+  private reconnectInProgress = false;
   private logBaileys = this.configService.get<Log>('LOG').BAILEYS;
   private eventProcessingQueue: Promise<void> = Promise.resolve();
 
@@ -277,6 +280,31 @@ export class BaileysStartupService extends ChannelStartupService {
 
   public get connectionStatus() {
     return this.stateConnection;
+  }
+
+  private async reconnectAfterTransientFailure() {
+    if (this.reconnectInProgress) return;
+
+    this.reconnectInProgress = true;
+
+    try {
+      while (this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS && !this.endSession) {
+        const delayMs = reconnectDelayMs(this.reconnectAttempts);
+        this.reconnectAttempts++;
+
+        try {
+          await delay(delayMs);
+          await this.connectToWhatsapp(this.phoneNumber);
+          return;
+        } catch (error) {
+          this.logger.error(error);
+        }
+      }
+
+      this.logger.error(`Reconnect limit reached for instance ${this.instance.name}`);
+    } finally {
+      this.reconnectInProgress = false;
+    }
   }
 
   public async logoutInstance() {
@@ -440,10 +468,8 @@ export class BaileysStartupService extends ChannelStartupService {
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const codesToNotReconnect = [DisconnectReason.loggedOut, DisconnectReason.forbidden, 402, 406];
-      const shouldReconnect = !codesToNotReconnect.includes(statusCode);
-      if (shouldReconnect) {
-        await this.connectToWhatsapp(this.phoneNumber);
+      if (shouldReconnect(statusCode)) {
+        await this.reconnectAfterTransientFailure();
       } else {
         this.sendDataWebhook(Events.STATUS_INSTANCE, {
           instance: this.instance.name,
@@ -480,6 +506,7 @@ export class BaileysStartupService extends ChannelStartupService {
     }
 
     if (connection === 'open') {
+      this.reconnectAttempts = 0;
       this.instance.wuid = this.client.user.id.replace(/:\d+/, '');
       try {
         const profilePic = await this.profilePicture(this.instance.wuid);

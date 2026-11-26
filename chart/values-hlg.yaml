@@ -3,6 +3,8 @@ image:
   tag: hlg
 secretName: evolution-api-hlg-secrets
 env:
+  - name: NODE_OPTIONS
+    value: '--max-old-space-size=768'
   - name: SERVER_TYPE
     value: http
   - name: SERVER_PORT
