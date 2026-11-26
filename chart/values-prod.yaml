@@ -10,6 +10,8 @@ resources:
     cpu: '1'
     memory: 1536Mi
 env:
+  - name: NODE_OPTIONS
+    value: '--max-old-space-size=1024'
   - name: SERVER_TYPE
     value: http
   - name: SERVER_PORT
